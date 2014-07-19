@@ -1,0 +1,9 @@
+/bin
+/data/*
+/output/*
+/results/*
+/eval/*
+/src/*.txt
+/src/*.out
+/src/*.class
+/official_docs/*
