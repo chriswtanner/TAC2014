@@ -2,44 +2,51 @@
 import random
 import fnmatch
 import os
-
+import re
 def main():
+
+    # custom params
     baseDir = '/Users/christanner/research/projects/TAC2014/'
 
     dataInputDir = baseDir + 'TAC_2014_BiomedSumm_Training_Data/data/'
     dataOutputDir = baseDir + 'eval/'
     malletOutput = dataOutputDir + "mallet-tac.txt"
-    docLegendOutput = dataOutputDir + "tacLegend.txt"
+    annoOutput = dataOutputDir + "annoLegend.txt"
 
+    # tokens which will be ignored (case sensitive)
     badTokens = []
-    badTokens.append("author affiliations")
-    badTokens.append("abstract")
-    badTokens.append("next section")
-    badTokens.append("previous section")
-    badTokens.append("figure")
-    badTokens.append("table")
-    badTokens.append("view larger version:")
-    badTokens.append("in this page in a new window")
-    badTokens.append("in this window in a new window")
-    badTokens.append("download as powerpoint slide")
-    badTokens.append("view this table")
-    badTokens.append("results")
-    badTokens.append("discussion")
-    badTokens.append("methods")
-    badTokens.append("formula")
-    badTokens.append("results")
-    badTokens.append("introduction")
-    badTokens.append("go to:")
-    fullDocs = []
-    malletOut = open(malletOutput, 'w')
+    badTokens.append("Author Affiliations")
+    badTokens.append("Abstract")
+    badTokens.append("Next Section")
+    badTokens.append("Previous Section")
+    badTokens.append("Figure")
+    badTokens.append("Table")
+    badTokens.append("View Larger Version:")
+    badTokens.append("In this page In a new window")
+    badTokens.append("In this window In a new window")
+    badTokens.append("Download as PowerPoint Slide")
+    badTokens.append("View this table")
+    badTokens.append("Results")
+    badTokens.append("Discussion")
+    badTokens.append("Methods")
+    badTokens.append("Formula")
+    badTokens.append("Results")
+    badTokens.append("Go To:")
 
+    fullDocs = []
+    annoDocs = []
+    malletOut = open(malletOutput, 'w')
+    annoOut = open(annoOutput, 'w')
+
+    # traverses dataDir to find docs and the annotations
     for root, dirnames, filenames in os.walk(dataInputDir):
         for filename in fnmatch.filter(filenames, '*.txt'):
             p = str(os.path.join(root, filename))
             
             if ("Documents_Text" in p) and ("Summary" not in p):
                 fullDocs.append(p)
-
+            elif ("Annotation" in p) and ("ann" in p):
+                annoDocs.append(p)
 
     # reads every doc in the corpus, in order to output a mallet-formatted file:
     # e.g.,
@@ -49,7 +56,10 @@ def main():
     # NOTE: we ignore all info before the 'introduction', 'main text', and 'abstract' section titles
     for d in fullDocs:
         print "reading doc: " + d
-        fileID = d[d.rfind("/")+1:]
+        matchObj = re.match(r'.*data/(.*)_TRAIN.*/(.*)', d, re.M|re.I)
+        if matchObj:
+            fileID = matchObj.group(1) + "_" + matchObj.group(2)
+        #fileID = d[d.rfind("/")+1:]
         oneline = ""
         foundIntro = False
         with open(d) as f:
@@ -76,6 +86,14 @@ def main():
         if (not foundIntro):
             print "ERROR: we found no intro/abstract/maintext section, so we saved the entire text!"
     malletOut.close()
+
+    # simply concatenates all annotation files together into 1 file
+    for d in annoDocs:
+        #print "concatenating " + d
+        with open(d) as f:
+            for line in f:
+                if (line.strip() != ""):
+                    annoOut.write(line)
 
 main()
     
