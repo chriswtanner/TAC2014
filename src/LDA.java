@@ -28,13 +28,13 @@ import cc.mallet.types.*;
 public class LDA {
 
 	// LDA variables
-	double ldaAlpha = 100;
-	double ldaGamma = 0.1;
+	double ldaAlpha = 50;
+	double ldaGamma = 0.01; // was 0.1
 	int optimizeInterval = 100;
-	int numIterations = 5000; // 3,000
+	int numIterations = 2000; // 3,000
 	//double totalFlutter = 0.05;
     double padding = 0.00001;
-	int numTopics = 50; // 50
+	int numTopics = 25; // 50
 	String malletInput = "";
 	String malletStopwords = "";
 	
@@ -72,7 +72,7 @@ public class LDA {
         //    "\\w+"    ( A-Z, a-z, 0-9, _ )
         //    "[\\p{L}\\p{N}_]+|[\\p{P}]+"   (a group of only letters and numbers OR
         //                                    a group of only punctuation marks)
-        Pattern tokenPattern = Pattern.compile("\\S+");
+        Pattern tokenPattern = Pattern.compile("\\w+");//("[\\p{L}\\p{N}_]+");//Pattern.compile("\\S+");
             //Pattern.compile("[\\p{L}\\p{N}_]+");
         		
         // Tokenize raw strings
@@ -123,7 +123,7 @@ public class LDA {
 
         // Pipes: lowercase, tokenize, remove stopwords, map to features
         pipeList.add( new CharSequenceLowercase());
-        pipeList.add( new CharSequence2TokenSequence(Pattern.compile("\\S+"))); //Pattern.compile("\\p{L}[\\p{L}\\p{P}]+\\p{L}")) );
+        pipeList.add( new CharSequence2TokenSequence(Pattern.compile("\\p{L}[\\p{L}\\p{P}]+\\p{L}"))); // ("\\S+")))
         pipeList.add( new TokenSequenceRemoveStopwords(new File(malletStopwords), "UTF-8", false, false, false) );
         pipeList.add( new TokenSequence2FeatureSequence() );
 
@@ -199,6 +199,7 @@ public class LDA {
         } // end of setting P(W|Z)
         
         // stores every P(Z|D)
+        System.out.println("# docs in corpus: " + instances.size());
         for (int i=0; i<instances.size(); i++) {
         	String curFilename = (String)instances.get(i).getTarget();
         	

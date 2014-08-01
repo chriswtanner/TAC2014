@@ -2,5 +2,6 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="/Users/christanner/research/libraries/mallet-2.0.7/dist/mallet.jar" sourcepath="/Users/christanner/research/libraries/mallet-2.0.7/src"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

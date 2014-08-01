@@ -6,19 +6,23 @@ public class TACEvaluator {
 	public static void main(String[] args) throws IOException {
 		
 		// NOTE: simply change this value
-		String dataDir = "acl_20000";
+		String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
+		boolean runLDA = false;
 		
 		// LDA's input files
-		String malletInputFile = "/Users/christanner/research/projects/CitationFinder/eval/" + corpus + "-mallet.txt"; // mallet-input.txt";
-		String stopwords = "/Users/christanner/research/projects/CitationFinder/input/stopwords.txt";
+		String annoInputFile = dataDir + "annoLegend.txt";
+		String malletInputFile = dataDir + "mallet-tac.txt";
+		String stopwords = dataDir + "stopwords.txt";
 
-		// LDA's output/saved object
-		String ldaObject = "/Users/christanner/research/projects/CitationFinder/eval/lda_" + corpus + "_2000i.ser";
+		// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
+		String ldaObject = dataDir + "lda_2000i.ser";
 		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
-		LDA l = new LDA(malletInputFile, stopwords);
-		l.runLDA();
-		l.saveLDA(ldaObject);
+		if (runLDA) {
+			LDA l = new LDA(malletInputFile, stopwords);
+			l.runLDA();
+			l.saveLDA(ldaObject);
+		}
 	}
 
 }
