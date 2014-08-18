@@ -21,10 +21,11 @@ public class Document {
 	// represents the start and end character positions of all sentence, relative to 'originalText'
 	// e.g., originalText will start with header info, 
 	// but if we have (142,181) that means chars 142 - 181 within originalText represents a valid sentence we care about
-	List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
+	List<Sentence> sentences = new ArrayList<Sentence>();
 	
 	List<String> introSections = new ArrayList<String>(Arrays.asList("Introduction", "Summary", "Main Text", "Abstract"));
 	List<String> endPunctuations = new ArrayList<String>(Arrays.asList(".", ";", "!", "?"));
+	List<String> endSections = new ArrayList<String>(Arrays.asList("Acknowledgments", "References", "Footnotes"));
 	
  	// constructs a new Doc from the passed-in text file
 	public Document(String docDir, String topicID, String sourceName) throws IOException {
@@ -59,7 +60,7 @@ public class Document {
 	    // iterates through the 'originalText' string, trying to determine where sentence markers should be;
 	    // we'll ignore the headers, each newline represents the end of a new sentence, start of a new one,
 	    // and if we see endPunctuation (.!?;) followed by a space, we'll require that we've seen at least 40 chars to make a sentence
-	    if (name.equals("Voorhoeve.txt")) {
+	    //if (name.equals("Voorhoeve.txt")) {
 	    	
 	    	boolean foundIntro = false;
 	    	int startIndex = 0;
@@ -68,19 +69,34 @@ public class Document {
 		    	
 		    	// checks if we just started a new line
 		    	if (i>0 && originalText.charAt(i-1) == '\n') {
+		    		
+		    		String curWord = originalText.substring(startIndex, i).trim();
+		    		//System.out.println("word:" + curWord);
+		    		boolean reachedEnd = false;
+		    		for (String es : endSections) {
+		    			if (curWord.equals(es)) {
+		    				System.out.println("found:" + es);
+		    				reachedEnd = true;
+		    			}
+		    		}
+		    		if (reachedEnd) {
+		    			break;
+		    		}
 		    		startIndex = i;
-		    		System.out.println("setting starting index: " + startIndex);
+		    		
+		    		//System.out.println("setting starting index: " + startIndex);
 		    	}
 		    	//String curLine = "";
 		    	
-		    	// found a newline; let's potentially make a new start and end marker
+		    	// checks if current char is an endPunct char (e.g. .,;!?)
 		    	boolean isEndPunct = false;
 		    	for (String ep :  endPunctuations) {
 		    		if (Character.toString(c).equals(ep)) {
 		    			isEndPunct = true;
-		    			System.out.println("we found endPunct: " + ep);
+		    			//System.out.println("we found endPunct:" + ep);
 		    		}
 		    	}
+		    	
 		    	// although we found an end-punctuation, we still need to ensure that it's the end of the sentence
 		    	// by checking that the next char is EOF, \n or a space
 		    	if (isEndPunct) {
@@ -92,15 +108,28 @@ public class Document {
 		    		}
 		    	}
 		    	
-		    	
-		    	// we found an end marker!
+		    	// we found an end marker!  so, we potentially have a sentence; let's trim the beginning then
+		    	for (int j=startIndex; j<i; j++) {
+		    		if (originalText.charAt(j) != ' ') {
+		    			startIndex = j;
+		    			break;
+		    		}
+		    	}
 		    	if (foundIntro && (i - startIndex) >= minNumCharsPerSentence && (c == '\n' || isEndPunct)) {
-		    		sentenceMarkers.add(new IndexPair(startIndex, i));
+		    		
+		    		if (c != '\n') {
+		    			i++;
+		    		}
+		    		
+		    		Sentence s = new Sentence(startIndex, i-1, originalText.substring(startIndex, i));
+		    		sentences.add(s);
+		    		//System.out.println("making a new sentence:" + s);
+		    		startIndex = i+1;
 		    	} else if (c == '\n' && !foundIntro) {
 	    			boolean isIntroSection = false;
 	    			
 	    			String curLine = originalText.substring(startIndex, i);
-	    			System.out.println("curline:" + curLine);
+	    			//System.out.println("curline:" + curLine);
 	    			for (String intro : introSections) {
 	    				
 	    				if (curLine.equals(intro)) {
@@ -109,22 +138,16 @@ public class Document {
 	    			}
 	    			if (isIntroSection) {
 	    				foundIntro = true;
-	    				System.out.println("we found an intro!!; skipping to the end of this title");
+	    				//System.out.println("we found an intro!!; skipping to the end of this title");
 	    				i = originalText.indexOf("\n", i);
-	    				System.out.println("we are skipping to index: " + i + " = " + originalText.charAt(i));
+	    				//System.out.println("we are skipping to index: " + i + " = " + originalText.charAt(i));
 	    			}
 		    	}
-		    }
+		    //}
 	    }
 	}
 	
-	// represents the start and end character positions of a sentence, relative to 'originalText'
-	class IndexPair {
-		int startPos;
-		int endPos;
-		IndexPair(int s, int e) {
-			this.startPos = s;
-			this.endPos = e;
-		}
+	public String toString() {
+		return this.name + " (" + this.topicID + ") has " + this.sentences.size() + " sentences";
 	}
 }
