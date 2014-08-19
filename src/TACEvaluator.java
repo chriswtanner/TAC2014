@@ -43,12 +43,45 @@ public class TACEvaluator {
 		
 		Map<Citance, List<IndexPair>> jaccardPredictions = getJaccardPredictions(docs, citances);
 		
+		List<Double> recall = scorePredictions(jaccardPredictions);
+		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
 			LDA l = new LDA(malletInputFile, stopwordsFile);
 			l.runLDA();
 			l.saveLDA(ldaObject);
 		}
+	}
+
+	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
+	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) {
+		List<Double> recall = new ArrayList<Double>();
+		Map<Integer, List<Double>> recallSums = new HashMap<Integer, List<Double>>();
+		
+		for (Citance c : predictions.keySet()) {
+			for (Annotation a : c.annotations) {
+				for (int i=0; i<predictions.get(c).size(); i++) {
+					IndexPair eachSentenceMarkers = predictions.get(c).get(i);
+					
+					double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+					List<Double> tmp = new ArrayList<Double>();
+					if (recallSums.containsKey(i)) {
+						tmp = recallSums.get(i);
+					}
+					tmp.add(fillPercentage);
+					recallSums.put(i, tmp);
+				}
+			}
+		}
+		for (int i=0; i<recallSums.keySet().size(); i++) {
+			double sum = 0;
+			for (double d : recallSums.get(i)) {
+				sum += d;
+			}
+			recall.add(sum / (double)recallSums.get(i).size()); // calculates the average
+			System.out.println(i + "," + recall.get(i));
+		}
+		return recall;
 	}
 
 	// for each Citance, returns a ranking of the Reference's sentences
