@@ -71,8 +71,16 @@ public class TACEvaluator {
 					tmp.add(fillPercentage);
 					recallSums.put(i, tmp);
 				}
+				/*
+				for (int i=predictions.get(c).size(); i<1000; i++) {
+					recallSums.put(i, recallSums.get(predictions.get(c).size()-1));
+				}
+				*/
 			}
 		}
+		
+		//int numDocs = recallSums.get(0).size(); // the # of docs that have ranked against 1 sentence
+		
 		for (int i=0; i<recallSums.keySet().size(); i++) {
 			double sum = 0;
 			for (double d : recallSums.get(i)) {
