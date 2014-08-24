@@ -33,11 +33,10 @@ public class Annotation {
 		
 		for (int refOffPairNum=0; refOffPairNum<referenceOffsets.size(); refOffPairNum++) {
 			IndexPair ip = referenceOffsets.get(refOffPairNum);
-
+			
 			for (int i=start; i<=end; i++) {
 				if (i>=ip.startPos && i<=ip.endPos) {
 					
-
 					// represents the index pos in the boolean[]; e.g., 100 - 101 boolean span (start and end pos) would have i=100 fill into cell 0 
 					int modifiedIndex = i - ip.startPos; 
 
@@ -50,7 +49,6 @@ public class Annotation {
 				}
 			}
 		}
-		
 		return (double)filledPos / (double)totalPos;
 	}
 	
@@ -58,16 +56,5 @@ public class Annotation {
 		return "anno:" + referenceOffsets + ";" + referenceText + ";" + discourse + ";" + annotator;
 	}
 	
- 	// represents the start and end character positions of a sentence, relative to the containing doc (the reference doc)
- 	class IndexPair {
- 		int startPos;
- 		int endPos;
- 		IndexPair(int s, int e) {
- 			this.startPos = s;
- 			this.endPos = e;
- 		}
- 		public String toString() {
- 			return startPos + "-" + endPos;
- 		}
- 	}
+
 }

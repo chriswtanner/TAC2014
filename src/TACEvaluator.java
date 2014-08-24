@@ -106,7 +106,8 @@ public class TACEvaluator {
 			
 			// the non-stoplist types from the Citance
 			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
-			System.out.println("citance types:" + citanceTypes);
+			
+			System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
 			// looks within the relevant reference doc (aka source doc)
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			//System.out.println(c.referenceDoc);
@@ -256,10 +257,10 @@ public class TACEvaluator {
 			Annotation a = new Annotation(refOffsets, refText, discourse, annotator);
 			System.out.println(a);
 			c.addAnnotation(a);
-			if (!uidToCitance.containsKey(uid)) {
-				uidToCitance.put(uid, c);
-				ret.add(c);
-			}
+			//if (!uidToCitance.containsKey(uid)) {
+			uidToCitance.put(uid, c);
+			ret.add(c);
+			//}
 		}
 		return ret;
 	}
@@ -323,17 +324,4 @@ public class TACEvaluator {
 		}
 		return ret;
 	}
-	
- 	// represents the start and end character positions of a sentence, relative to the containing doc (the reference doc)
- 	static class IndexPair {
- 		int startPos;
- 		int endPos;
- 		IndexPair(int s, int e) {
- 			this.startPos = s;
- 			this.endPos = e;
- 		}
- 		public String toString() {
- 			return startPos + "-" + endPos;
- 		}
- 	}
 }
