@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 
@@ -41,9 +42,11 @@ public class TACEvaluator {
 		Map<String, Document> docs = loadReferenceDocuments(annoInputFile);
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
-		Map<Citance, List<IndexPair>> jaccardPredictions = getJaccardPredictions(docs, citances);
+		//Map<Citance, List<IndexPair>> jaccardPredictions = getJaccardPredictions(docs, citances);
+		//Map<Citance, List<IndexPair>> perfectPredictions = getPerfectPredictions(docs, citances);
+		Map<Citance, List<IndexPair>> longestStringPredictions = getLongestStringPredictions(docs, citances);
 		
-		List<Double> recall = scorePredictions(jaccardPredictions);
+		List<Double> recall = scorePredictions(longestStringPredictions); //jaccardPredictions);
 		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
@@ -53,29 +56,42 @@ public class TACEvaluator {
 		}
 	}
 
+
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
 	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) {
 		List<Double> recall = new ArrayList<Double>();
 		Map<Integer, List<Double>> recallSums = new HashMap<Integer, List<Double>>();
 		
+		// first determine max # of sentences because we want longer docs to still include stats from the shorter docs...
+		// so we pad the shorter ones to match the length of the longest
+		// (i.e., let 300 be the lengthiest doc; a 200-sentence doc will include its coverage % for sentences 201-300)
+		int maxLengthOfDoc = 0;
+		for (Citance c : predictions.keySet()) {
+			if (predictions.get(c).size() > maxLengthOfDoc) {
+				maxLengthOfDoc = predictions.get(c).size();
+			}
+		}
+		
 		for (Citance c : predictions.keySet()) {
 			for (Annotation a : c.annotations) {
-				for (int i=0; i<predictions.get(c).size(); i++) {
-					IndexPair eachSentenceMarkers = predictions.get(c).get(i);
+				
+				double lastFill = 0;
+				for (int i=0; i<maxLengthOfDoc; i++) {
 					
-					double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+					// look at the Citance's actual returned sentence
+					if (i<predictions.get(c).size()) {
+						IndexPair eachSentenceMarkers = predictions.get(c).get(i);
+					
+						double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+						lastFill = fillPercentage;
+					}
 					List<Double> tmp = new ArrayList<Double>();
 					if (recallSums.containsKey(i)) {
 						tmp = recallSums.get(i);
 					}
-					tmp.add(fillPercentage);
+					tmp.add(lastFill);
 					recallSums.put(i, tmp);
 				}
-				/*
-				for (int i=predictions.get(c).size(); i<1000; i++) {
-					recallSums.put(i, recallSums.get(predictions.get(c).size()-1));
-				}
-				*/
 			}
 		}
 		
@@ -92,6 +108,158 @@ public class TACEvaluator {
 		return recall;
 	}
 
+	// for each Citance, returns a ranking of the Reference's sentences
+	// (NOTE: the target/golden answers could technically be
+	// sentence fragments, but this seems rare and would complicate things a lot)
+	private static Map<Citance, List<IndexPair>> getLongestStringPredictions(Map<String, Document> docs, Set<Citance> citances) {
+		
+		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
+		
+		for (Citance c : citances) {
+			
+			Map<Sentence, Double> sentenceScores = new HashMap<Sentence, Double>();
+			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
+			
+			// the non-stoplist types from the Citance
+			//Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			List<String> citanceWords = c.getTextTokensAsList();
+			
+			// just used for efficient look-up to see if any of the reference words are found within the citance
+			Set<String> citanceTypes = new HashSet<String>();
+			for (String w : citanceWords) {
+				citanceTypes.add(w);
+			}
+			
+			System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
+			// looks within the relevant reference doc (aka source doc)
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			//System.out.println(c.referenceDoc);
+			//System.out.println(docs);
+			
+			double longestSentenceInDoc = 0;
+			for (Sentence s : d.sentences) {
+				//Set<String> curReferenceTypes = removeStopwords(s.types);
+				List<String> referenceWords = s.tokens;
+				
+				//System.out.println("sentence types:" + curReferenceTypes);
+				double longestLength = 0;
+				for (int refIndex=0; refIndex<referenceWords.size(); refIndex++) {
+					String token = referenceWords.get(refIndex);
+					
+					// citance contains the given word, so let's assert that the shared words starts w/ the current token,
+					// and see how long it runs... although we don't know where it starts within the Citance, so let's
+					// try every occurrence of the token
+					if (citanceTypes.contains(token)) {
+
+						for (int i=0; i<citanceWords.size(); i++) {
+							// found a starting position to try
+							if (citanceWords.get(i).equals(token)) {
+								double curLength = 1;
+								// stopwords will only count 0.25 of a word (so, 'the dog of' would be 1.5 but 'chester dog' would be 2)
+								if (stopwords.contains(token)) {
+									curLength = 0.25;
+								}
+								for (int j=refIndex+1; j<referenceWords.size(); j++) {
+									int offset = j-refIndex;
+									if ((i+offset) < citanceWords.size() && citanceWords.get(i+offset).equals(referenceWords.get(j))) {
+										if (stopwords.contains(referenceWords.get(j))) {
+											curLength += 0.25;
+										} else {
+											curLength++;
+										}
+									} else {
+										break;
+									}
+								}
+								if (curLength > longestLength) {
+									longestLength = curLength;
+									//System.out.println("ref (" + referenceWords + ") starting at " + refIndex + " (" + referenceWords.get(refIndex) + ") matches with citance @ " + i + " (" + citanceWords.get(i) + ") and has a length of " + curLength);
+								}
+						
+							}
+						}
+					}
+				}
+				sentenceScores.put(s, longestLength);
+				//System.out.println("sentence " + s + " => " + longestLength);
+				
+				if (longestLength > longestSentenceInDoc) {
+					longestSentenceInDoc = longestLength;
+				}
+			}
+			
+			System.out.println("citance:" + c.citationText + " matched " + longestSentenceInDoc + " in the doc");
+			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
+			while (it.hasNext()) {
+				Sentence s = (Sentence)it.next();
+				IndexPair i = new IndexPair(s.startPos, s.endPos);
+				sentenceMarkers.add(i);
+				
+				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
+			}
+			ret.put(c, sentenceMarkers);
+			
+		}
+		return ret;
+	}
+	
+	private static Map<Citance, List<IndexPair>> getPerfectPredictions(Map<String, Document> docs, Set<Citance> citances) {
+		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
+		
+		for (Citance c : citances) {
+			
+			Map<Sentence, Double> sentenceScores = new HashMap<Sentence, Double>();
+			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
+			
+			// the non-stoplist types from the Citance
+			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			
+			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
+			// looks within the relevant reference doc (aka source doc)
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			//System.out.println(c.referenceDoc);
+			//System.out.println(docs);
+			
+			Random rand = new Random();
+			for (Sentence s : d.sentences) {
+				Set<String> curReferenceTypes = removeStopwords(s.types);
+				//System.out.println("sentence types:" + curReferenceTypes);
+				double score = 0;
+				int intersection  = 0;
+				for (String token : curReferenceTypes) {
+					if (citanceTypes.contains(token)) {
+						intersection++;
+					}
+				}
+				// ensures both the citance and reference sentences aren't just stopwords
+				if (curReferenceTypes.size() > 0 && citanceTypes.size() > 0 ) {
+					score = (double)intersection / ((double)(citanceTypes.size() + curReferenceTypes.size() - intersection));
+				}
+				
+				sentenceScores.put(s, rand.nextDouble());
+			}
+			
+			Annotation perfect = c.annotations.get(rand.nextInt(c.annotations.size()));
+			for (IndexPair ip : perfect.referenceOffsets) {
+				sentenceMarkers.add(ip);
+			}
+			
+			System.out.println("citance:" + c.citationText);
+			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
+			while (it.hasNext()) {
+				Sentence s = (Sentence)it.next();
+				IndexPair i = new IndexPair(s.startPos, s.endPos);
+				sentenceMarkers.add(i);
+				
+				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
+			}
+			ret.put(c, sentenceMarkers);
+			
+		}
+		return ret;
+	}
+	
+	
 	// for each Citance, returns a ranking of the Reference's sentences
 	// (NOTE: the target/golden answers could technically be
 	// sentence fragments, but this seems rare and would complicate things a lot)
