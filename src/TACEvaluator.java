@@ -1,6 +1,8 @@
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +27,9 @@ public class TACEvaluator {
 	static int numSentencesPerCitance = 5;
 	
 	static Set<String> stopwords;
+	
+	// output
+	static String resultsOut = dataDir + "results.csv";
 	
 	// LDA's input files
 	static String annoInputFile = dataDir + "annoLegend.txt";
@@ -58,9 +63,10 @@ public class TACEvaluator {
 
 
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
-	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) {
+	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) throws IOException {
 		List<Double> recall = new ArrayList<Double>();
 		Map<Integer, List<Double>> recallSums = new HashMap<Integer, List<Double>>();
+		BufferedWriter bout = new BufferedWriter(new FileWriter(resultsOut));
 		
 		// first determine max # of sentences because we want longer docs to still include stats from the shorter docs...
 		// so we pad the shorter ones to match the length of the longest
@@ -96,15 +102,16 @@ public class TACEvaluator {
 		}
 		
 		//int numDocs = recallSums.get(0).size(); // the # of docs that have ranked against 1 sentence
-		
+		bout.write("# sentences,avg character recall %\n");
 		for (int i=0; i<recallSums.keySet().size(); i++) {
 			double sum = 0;
 			for (double d : recallSums.get(i)) {
 				sum += d;
 			}
 			recall.add(sum / (double)recallSums.get(i).size()); // calculates the average
-			System.out.println(i + "," + recall.get(i));
+			bout.write(i + "," + recall.get(i) + "\n");
 		}
+		bout.close();
 		return recall;
 	}
 
