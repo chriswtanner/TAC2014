@@ -22,7 +22,7 @@ public class TACEvaluator {
 
 	// NOTE: simply change this value
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
-	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data/";
+	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
 	static int numSentencesPerCitance = 5;
 	
@@ -36,6 +36,7 @@ public class TACEvaluator {
 	static String malletInputFile = dataDir + "mallet-tac.txt";
 	static String stopwordsFile = dataDir + "stopwords.txt";
 
+	static Map<String, Document> docs = new HashMap<String, Document>();
 	
 	// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
 	static String ldaObject = dataDir + "lda_2000i.ser";
@@ -44,14 +45,15 @@ public class TACEvaluator {
 	
 		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		stopwords = loadStopwords(stopwordsFile);
-		Map<String, Document> docs = loadReferenceDocuments(annoInputFile);
+		/*Map<String, Document> */
+		docs = loadReferenceDocuments(annoInputFile);
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
-		//Map<Citance, List<IndexPair>> jaccardPredictions = getJaccardPredictions(docs, citances);
+		Map<Citance, List<IndexPair>> jaccardPredictions = getJaccardPredictions(docs, citances);
 		//Map<Citance, List<IndexPair>> perfectPredictions = getPerfectPredictions(docs, citances);
-		Map<Citance, List<IndexPair>> longestStringPredictions = getLongestStringPredictions(docs, citances);
+		//Map<Citance, List<IndexPair>> longestStringPredictions = getLongestStringPredictions(docs, citances);
 		
-		List<Double> recall = scorePredictions(longestStringPredictions); //jaccardPredictions);
+		List<Double> recall = scorePredictions(jaccardPredictions);
 		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
@@ -78,6 +80,7 @@ public class TACEvaluator {
 			}
 		}
 		
+		System.out.println("most sentences in any reference doc: " + maxLengthOfDoc);
 		for (Citance c : predictions.keySet()) {
 			for (Annotation a : c.annotations) {
 				
@@ -95,10 +98,27 @@ public class TACEvaluator {
 					if (recallSums.containsKey(i)) {
 						tmp = recallSums.get(i);
 					}
+					if (i == maxLengthOfDoc-1 && lastFill < 0.5) {
+						System.out.println("lastfill: " + lastFill);
+						for (IndexPair ip : a.referenceOffsets) {
+							//System.out.println(docs);
+							//System.out.println(c.referenceDoc + " has originalText: " + docs.get(c.topicID + ":" + c.referenceDoc).originalText); //.length());
+							System.out.println(ip + " => " + c.referenceDoc + " => " + docs.get(c.topicID + ":" + c.referenceDoc).originalText.substring(ip.startPos, ip.endPos));
+						}
+						System.out.println("our sentence markers:");
+						for (int x=0; x<predictions.get(c).size(); x++) {
+							//System.out.println(predictions.get(c).get(x));
+						}
+						//break;
+						//System.exit(1);
+					}
 					tmp.add(lastFill);
 					recallSums.put(i, tmp);
 				}
+				
+				//System.out.println(c + " => " + recallSums.get(maxLengthOfDoc-1));
 			}
+			//break;
 		}
 		
 		//int numDocs = recallSums.get(0).size(); // the # of docs that have ranked against 1 sentence
@@ -110,6 +130,7 @@ public class TACEvaluator {
 			}
 			recall.add(sum / (double)recallSums.get(i).size()); // calculates the average
 			bout.write(i + "," + recall.get(i) + "\n");
+			System.out.println(i + "," + recall.get(i));
 		}
 		bout.close();
 		return recall;
@@ -137,7 +158,7 @@ public class TACEvaluator {
 				citanceTypes.add(w);
 			}
 			
-			System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
+			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
 			// looks within the relevant reference doc (aka source doc)
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			//System.out.println(c.referenceDoc);
@@ -282,11 +303,14 @@ public class TACEvaluator {
 			// the non-stoplist types from the Citance
 			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
 			
-			System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
+			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
+
 			// looks within the relevant reference doc (aka source doc)
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
-			//System.out.println(c.referenceDoc);
-			//System.out.println(docs);
+			if (d.sentences.size() == 0) {
+				System.err.println(d + " has 0 sentences");
+				System.exit(1);
+			}
 			for (Sentence s : d.sentences) {
 				Set<String> curReferenceTypes = removeStopwords(s.types);
 				//System.out.println("sentence types:" + curReferenceTypes);
@@ -315,7 +339,9 @@ public class TACEvaluator {
 				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
 			}
 			ret.put(c, sentenceMarkers);
-			
+			if (sentenceMarkers.size() == 0) {
+				System.out.println("we have 0 sentence markers for citance " + c);
+			}
 		}
 		return ret;
 	}
@@ -437,6 +463,10 @@ public class TACEvaluator {
 			ret.add(c);
 			//}
 		}
+		
+		Citance c = uidToCitance.get("D1415_TRAIN:Blasco.txt");
+		System.out.println(uidToCitance);
+		//System.exit(1);
 		return ret;
 	}
 

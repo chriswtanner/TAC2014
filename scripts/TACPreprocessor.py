@@ -8,7 +8,7 @@ def main():
     # custom params
     baseDir = '/Users/christanner/research/projects/TAC2014/'
 
-    dataInputDir = baseDir + 'TAC_2014_BiomedSumm_Training_Data/data/'
+    dataInputDir = baseDir + 'TAC_2014_BiomedSumm_Training_Data_V1.2/data/'
     dataOutputDir = baseDir + 'eval/'
     malletOutput = dataOutputDir + "mallet-tac.txt"
     annoOutput = dataOutputDir + "annoLegend.txt"

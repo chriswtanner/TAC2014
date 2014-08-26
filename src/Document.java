@@ -40,7 +40,7 @@ public class Document {
 	    byte[] buffer = new byte[(int) f.length()];
 	    new DataInputStream(fin).readFully(buffer);
 	    fin.close();
-	    String originalText = new String(buffer, "UTF-8");
+	    this.originalText = new String(buffer, "UTF-8");
 	    
 	    // iterates through the 'originalText' string, trying to determine where sentence markers should be;
 	    // we'll ignore the headers, each newline represents the end of a new sentence, start of a new one,
@@ -93,7 +93,7 @@ public class Document {
 	    			break;
 	    		}
 	    	}
-	    	if (foundIntro && (i - startIndex) >= minNumCharsPerSentence && (c == '\n' || isEndPunct)) {
+	    	if (/*foundIntro && */(i - startIndex) >= minNumCharsPerSentence && (c == '\n' || isEndPunct)) {
 	    		
 	    		if (c != '\n') {
 	    			i++;
@@ -115,9 +115,14 @@ public class Document {
     			}
     			if (isIntroSection) {
     				foundIntro = true;
+    				sentences.clear();
     				i = originalText.indexOf("\n", i);
     			}
 	    	}
+	    }
+	    if (name.equals("Figueroa.txt")) {
+	    	System.out.println("Figueroa.txt:");
+	    	System.out.println("# chars: " + originalText.length());
 	    }
 	}
 	
