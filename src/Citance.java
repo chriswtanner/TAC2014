@@ -38,7 +38,7 @@ public class Citance {
 	// returns lowercased tokens as a list
 	public List<String> getTextTokensAsList() {
 		List<String> ret = new ArrayList<String>();
-		StringTokenizer st = new StringTokenizer(citationText.toLowerCase());
+		StringTokenizer st = new StringTokenizer(citationText.toLowerCase(), " ,.;\"");
 		while (st.hasMoreTokens()) {
 			ret.add(st.nextToken());
 		}
@@ -48,7 +48,7 @@ public class Citance {
 	// returns lowercased tokens as a set
 	public Set<String> getTextTokensAsSet() {
 		Set<String> ret = new HashSet<String>();
-		StringTokenizer st = new StringTokenizer(citationText.toLowerCase());
+		StringTokenizer st = new StringTokenizer(citationText.toLowerCase(), " ,.;\"");
 		while (st.hasMoreTokens()) {
 			ret.add(st.nextToken());
 		}

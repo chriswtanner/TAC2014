@@ -19,7 +19,7 @@ public class Sentence {
 		this.sentence = s.trim();
 		
 		//System.out.println("receiving:" + s);
-		StringTokenizer st = new StringTokenizer(s);
+		StringTokenizer st = new StringTokenizer(s, " ,.;\"");
 		while (st.hasMoreTokens()) {
 			String token = st.nextToken();
 			types.add(token);

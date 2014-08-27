@@ -34,7 +34,7 @@ public class LDA {
 	int numIterations = 2000; // 3,000
 	//double totalFlutter = 0.05;
     double padding = 0.00001;
-	int numTopics = 25; // 50
+	int numTopics = 50; // 50
 	String malletInput = "";
 	String malletStopwords = "";
 	
@@ -123,7 +123,7 @@ public class LDA {
 
         // Pipes: lowercase, tokenize, remove stopwords, map to features
         pipeList.add( new CharSequenceLowercase());
-        pipeList.add( new CharSequence2TokenSequence(Pattern.compile("\\p{L}[\\p{L}\\p{P}]+\\p{L}"))); // ("\\S+")))
+        pipeList.add( new CharSequence2TokenSequence(Pattern.compile("\\S+"))); //("\\p{L}[\\p{L}\\p{P}]+\\p{L}"))); // ("\\S+")))
         pipeList.add( new TokenSequenceRemoveStopwords(new File(malletStopwords), "UTF-8", false, false, false) );
         pipeList.add( new TokenSequence2FeatureSequence() );
 

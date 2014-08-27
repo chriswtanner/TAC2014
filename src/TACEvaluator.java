@@ -1,9 +1,11 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -24,7 +26,8 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
-	static int numSentencesPerCitance = 5;
+	static String method = "lda"; //lda";
+
 	
 	static Set<String> stopwords;
 	
@@ -39,21 +42,15 @@ public class TACEvaluator {
 	static Map<String, Document> docs = new HashMap<String, Document>();
 	
 	// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
-	static String ldaObject = dataDir + "lda_2000i.ser";
+	static String ldaObject = dataDir + "lda_50z_2000i.ser";
 	
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException, ClassNotFoundException {
 	
-		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		stopwords = loadStopwords(stopwordsFile);
-		/*Map<String, Document> */
+		
+		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		docs = loadReferenceDocuments(annoInputFile);
 		Set<Citance> citances = loadCitances(annoInputFile);
-		
-		Map<Citance, List<IndexPair>> jaccardPredictions = getJaccardPredictions(docs, citances);
-		//Map<Citance, List<IndexPair>> perfectPredictions = getPerfectPredictions(docs, citances);
-		//Map<Citance, List<IndexPair>> longestStringPredictions = getLongestStringPredictions(docs, citances);
-		
-		List<Double> recall = scorePredictions(jaccardPredictions);
 		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
@@ -61,6 +58,26 @@ public class TACEvaluator {
 			l.runLDA();
 			l.saveLDA(ldaObject);
 		}
+		
+		// runs the lda-saved model to create topics per sentence
+		Map<Citance, List<IndexPair>> predictions = null;
+		if (method.equals("lda")) {
+			
+			ObjectInputStream in = new ObjectInputStream(new FileInputStream(ldaObject));
+			TopicModelObject tmo = (TopicModelObject)in.readObject();
+			
+			predictions = getLDAPredictions(docs, citances, tmo);
+		} else if (method.equals("jaccard")) {
+			predictions = getJaccardPredictions(docs, citances);
+		} else if (method.equals("longest")) {
+			predictions = getLongestStringPredictions(docs, citances);
+		} else if (method.equals("perfect")) {
+			predictions = getPerfectPredictions(docs, citances);
+		}
+		
+		List<Double> recall = scorePredictions(predictions);
+		
+
 	}
 
 
@@ -135,6 +152,198 @@ public class TACEvaluator {
 		bout.close();
 		return recall;
 	}
+
+	// for each Citance, returns a ranking of the Reference's sentences
+	// (NOTE: the target/golden answers could technically be
+	// sentence fragments, but this seems rare and would complicate things a lot)
+	private static Map<Citance, List<IndexPair>> getLDAPredictions(Map<String, Document> docs, Set<Citance> citances, TopicModelObject tmo) {
+		
+		// populates the topic data
+		System.out.println("docs:" + tmo.docToTopicProbabilities.keySet());
+		System.out.println("# topics: " + tmo.topicToWordProbabilities.keySet().size());
+		int numDocs = tmo.docToTopicProbabilities.keySet().size();
+		int numTopics = tmo.topicToWordProbabilities.keySet().size();
+		Map<String, Map<Integer, Double>> wordToTopicProbs = new HashMap<String, Map<Integer, Double>>();
+		
+		Set<String> vocab = new HashSet<String>();
+		for (Integer t : tmo.topicToWordProbabilities.keySet()) {
+			vocab.addAll(tmo.topicToWordProbabilities.get(t).keySet());
+		}
+		System.out.println("# unique words (aka types):" + vocab.size());
+		
+		// calculates P(Z)
+		double totalProb = 0;
+		double[] p_z = new double[numTopics];
+		for (int z=0; z<numTopics; z++) {
+			double sum_d_z = 0;
+			for (String doc : tmo.docToTopicProbabilities.keySet()) {
+				sum_d_z += tmo.docToTopicProbabilities.get(doc)[z];
+			}
+			p_z[z] = sum_d_z;
+			totalProb += sum_d_z;
+		}
+		double newSum = 0;
+		for (int z=0; z<numTopics; z++) {
+			p_z[z] /= totalProb;
+			System.out.println("P(z=" + z + ") = " + p_z[z]);
+			newSum += p_z[z];
+		}
+		
+		// calculates P(Z|W) for each w in vocab:
+		for (String w : vocab) {
+			double denomZ = 0;
+			double[] topicProbs = new double[numTopics];
+			
+			for (int z=0; z<numTopics; z++) {
+				double tmp = 0.000001;
+				if (tmo.topicToWordProbabilities.get(z).containsKey(w)) {
+					tmp += tmo.topicToWordProbabilities.get(z).get(w);
+				}
+				tmp *= p_z[z]; // now tmp = P(W|Z)P(Z)
+				topicProbs[z] = tmp;
+				denomZ += tmp;
+			}
+			Map<Integer, Double> topicToProb = new HashMap<Integer, Double>();
+			for (int z=0; z<numTopics; z++) {
+				topicProbs[z] /= denomZ;
+				topicToProb.put(z, topicProbs[z]);
+			}
+			wordToTopicProbs.put(w, topicToProb);
+		}
+		
+		Set<String> wordsNotFound = new HashSet<String>();
+
+		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
+		
+		for (Citance c : citances) {
+			
+			Map<Sentence, Double> sentenceScores = new HashMap<Sentence, Double>();
+			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
+			
+			// the non-stoplist types from the Citance
+			List<String> citanceWords = removeStopwords(c.getTextTokensAsList());
+			double[] citanceDistribution = getSentenceDistribution(citanceWords, wordToTopicProbs, numTopics);
+
+			for (String w : citanceWords) {
+				if (!vocab.contains(w)) {
+					wordsNotFound.add(w);
+					System.out.println("didn't find " + w);
+				}
+			}
+			
+
+			// looks within the relevant reference doc (aka source doc)
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			if (d.sentences.size() == 0) {
+				System.err.println(d + " has 0 sentences.  exiting!");
+				System.exit(1);
+			}
+			for (Sentence s : d.sentences) {
+				List<String> curReferenceTypes = removeStopwords(s.tokens);
+				//System.out.println("sentence types:" + curReferenceTypes);
+				
+				double[] referenceSentDistribution = getSentenceDistribution(curReferenceTypes, wordToTopicProbs, numTopics);
+				
+				double cosineScore = getCosineSim(citanceDistribution, referenceSentDistribution);
+				double klScore = getKL(citanceDistribution, referenceSentDistribution);
+				
+				sentenceScores.put(s, cosineScore);
+			}
+			
+			System.out.println("citance:" + c.citationText);
+			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
+			while (it.hasNext()) {
+				Sentence s = (Sentence)it.next();
+				IndexPair i = new IndexPair(s.startPos, s.endPos);
+				sentenceMarkers.add(i);
+				
+				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
+			}
+			ret.put(c, sentenceMarkers);
+			if (sentenceMarkers.size() == 0) {
+				System.out.println("we have 0 sentence markers for citance " + c);
+			}
+		}
+		System.out.println("# unique words NOT FOUND (aka types):" + wordsNotFound.size());
+		return ret;
+	}
+	
+	private static double getKL(double[] a,double[] b) {
+		double ret = 0;
+		double padding = 0.0000001;
+		int length = a.length;
+		for (int i=0; i<length; i++) {
+			ret += Math.log((a[i] + padding) / (b[i] + padding))*(a[i] + padding);
+		}
+		return ret;
+	}
+
+
+	private static double getCosineSim(double[] a, double[] b) {
+		int length = a.length;
+		double padding = 0.0000001;
+		boolean hasAnEmptyVector = true;
+		for (int i=0; i<length; i++) {
+			if (a[i] > 0) {
+				hasAnEmptyVector = false;
+			}
+		}
+		
+		if (hasAnEmptyVector) {
+			System.out.println("a is empty!");
+		}
+		hasAnEmptyVector = true;
+		for (int i=0; i<length; i++) {
+			if (b[i] > 0) {
+				hasAnEmptyVector = false;
+			}
+		}
+		if (hasAnEmptyVector) {
+			System.out.println("b is empty!");
+		}
+		
+		double num = 0;
+		for (int i=0; i<length; i++) {
+			num += (a[i]+padding)*(b[i]+padding);
+		}
+		
+		double denomA = 0;
+		for (int i=0; i<length; i++) {
+			denomA += Math.pow(a[i] + padding, 2);
+		}
+		
+		double denomB = 0;
+		for (int i=0; i<length; i++) {
+			denomB += Math.pow(b[i] + padding, 2);
+		}
+		
+		return num / (Math.sqrt(denomA) * Math.sqrt(denomB));
+	}
+
+
+	private static double[] getSentenceDistribution(List<String> sentence, Map<String, Map<Integer, Double>> wordToTopicProbs, int numTopics) {
+		
+		double[] ret = new double[numTopics];
+
+		for (String w : sentence) {
+			if (wordToTopicProbs.containsKey(w)) {
+				for (Integer t : wordToTopicProbs.get(w).keySet()) {
+					ret[t] += wordToTopicProbs.get(w).get(t);
+				}
+			}
+		}
+		
+		// normalizes
+		double total=0;
+		for (int t=0; t<numTopics; t++) {
+			total += ret[t];
+		}
+		for (int t=0; t<numTopics; t++) {
+			ret[t] /= total;
+		}
+		return ret;
+	}
+
 
 	// for each Citance, returns a ranking of the Reference's sentences
 	// (NOTE: the target/golden answers could technically be
@@ -302,7 +511,7 @@ public class TACEvaluator {
 			
 			// the non-stoplist types from the Citance
 			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
-			
+			//System.out.println("CITANCE: " + citanceTypes);
 			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
 
 			// looks within the relevant reference doc (aka source doc)
@@ -313,7 +522,7 @@ public class TACEvaluator {
 			}
 			for (Sentence s : d.sentences) {
 				Set<String> curReferenceTypes = removeStopwords(s.types);
-				//System.out.println("sentence types:" + curReferenceTypes);
+				//System.out.println("REFERENCE:" + curReferenceTypes);
 				double score = 0;
 				int intersection  = 0;
 				for (String token : curReferenceTypes) {
@@ -373,6 +582,16 @@ public class TACEvaluator {
 		return ret;
 	}
 
+	private static List<String> removeStopwords(List<String> tokens) {
+		List<String> ret = new ArrayList<String>();
+		for (String t : tokens) {
+			if (!stopwords.contains(t)) {
+				ret.add(t);
+			}
+		}
+		return ret;
+	}
+	
 	// creates each of the unique Citances, where a Citance also stores each Annotation that was provided for it (i.e., typically 4 per Citance)
 	static Set<Citance> loadCitances(String annoInputFile) throws IOException {
 		Set<Citance> ret = new HashSet<Citance>();
