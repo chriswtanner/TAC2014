@@ -120,13 +120,10 @@ public class Document {
     			}
 	    	}
 	    }
-	    if (name.equals("Figueroa.txt")) {
-	    	System.out.println("Figueroa.txt:");
-	    	System.out.println("# chars: " + originalText.length());
-	    }
+	    System.out.println("# sentences: " + sentences.size());
 	}
 	
-	private String filterText(String text) {
+	public String filterText(String text) {
 		String textPhase1 = "";
 		int parenCount = 0;
 		int bracketCount = 0;

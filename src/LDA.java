@@ -72,7 +72,7 @@ public class LDA {
         //    "\\w+"    ( A-Z, a-z, 0-9, _ )
         //    "[\\p{L}\\p{N}_]+|[\\p{P}]+"   (a group of only letters and numbers OR
         //                                    a group of only punctuation marks)
-        Pattern tokenPattern = Pattern.compile("\\w+");//("[\\p{L}\\p{N}_]+");//Pattern.compile("\\S+");
+        Pattern tokenPattern = Pattern.compile("\\S+");//("[\\p{L}\\p{N}_]+");//Pattern.compile("\\S+");
             //Pattern.compile("[\\p{L}\\p{N}_]+");
         		
         // Tokenize raw strings

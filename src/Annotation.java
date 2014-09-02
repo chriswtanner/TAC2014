@@ -52,9 +52,30 @@ public class Annotation {
 		return (double)filledPos / (double)totalPos;
 	}
 	
+	public double theoreticFillInSentence(int start, int end) {
+		double best = 0;
+		for (int refOffPairNum=0; refOffPairNum<referenceOffsets.size(); refOffPairNum++) {
+			IndexPair ip = referenceOffsets.get(refOffPairNum);
+			
+			int numFilled = 0;
+			for (int i=start; i<=end; i++) {
+				if (i>=ip.startPos && i<=ip.endPos) {
+					numFilled++;
+				}
+			}
+			double fillPercentage = (double)numFilled / (double)(ip.endPos - ip.startPos + 1);
+			if (fillPercentage > best) {
+				best = fillPercentage;
+			}
+		}
+		return best;
+	}
+	
 	public String toString() {
 		return "anno:" + referenceOffsets + ";" + referenceText + ";" + discourse + ";" + annotator;
 	}
+
+
 	
 
 }

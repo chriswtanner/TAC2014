@@ -26,13 +26,13 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
-	static String method = "lda"; //lda";
-
+	static String method = "jaccard"; //lda";
 	
 	static Set<String> stopwords;
 	
 	// output
 	static String resultsOut = dataDir + "results.csv";
+	static String statsOut = dataDir + "stats.csv";
 	
 	// LDA's input files
 	static String annoInputFile = dataDir + "annoLegend.txt";
@@ -75,12 +75,243 @@ public class TACEvaluator {
 			predictions = getPerfectPredictions(docs, citances);
 		}
 		
-		List<Double> recall = scorePredictions(predictions);
-		
+		//List<Double> recall = scorePredictions(predictions);
+		displayStats(predictions);
+		//printSimilarityStats(predictions, 50);
 
 	}
 
 
+	private static void printSimilarityStats(Map<Citance, List<IndexPair>> predictions, int numBuckets) throws IOException {
+		
+		BufferedWriter bout = new BufferedWriter(new FileWriter(statsOut));
+		double maxThreshold = 0.5;
+		double avgThreshold = 0.1;
+		
+		// prints x-y plot for the golden annotations (x=bin #, y=count)
+		int[] bins = new int[numBuckets]; // for the jaccard 
+		List<Double> perfectScores = new ArrayList<Double>();
+		List<Double> maxGoodScores = new ArrayList<Double>();
+		List<Double> maxBadScores = new ArrayList<Double>();
+		List<Double> avgGoodScores = new ArrayList<Double>();
+		List<Double> avgBadScores = new ArrayList<Double>();
+		double max = 0;
+		
+		// fills in the perfect, golden annotations
+		for (Citance c : predictions.keySet()) {
+			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			for (Annotation a : c.annotations) {
+				
+				Set<String> ret = new HashSet<String>();
+				StringTokenizer st = new StringTokenizer(a.referenceText.toLowerCase(), " ,.;\"");
+				while (st.hasMoreTokens()) {
+					ret.add(st.nextToken());
+				}
+				Set<String> annoTypes = removeStopwords(ret);
+				double score = 0;
+				int intersection  = 0;
+				for (String token : annoTypes) {
+					if (citanceTypes.contains(token)) {
+						intersection++;
+					}
+				}
+				// ensures both the citance and reference sentences aren't just stopwords
+				if (annoTypes.size() > 0 && citanceTypes.size() > 0 ) {
+					score = (double)intersection / ((double)(citanceTypes.size() + annoTypes.size() - intersection));
+				}
+				perfectScores.add(score);
+				
+				if (score > max) {
+					max = score;
+				}
+				//System.out.println(a.referenceText.toLowerCase() + " => " + annoTypes);
+			}
+		}
+		
+		max = 0; // resets the max because we'll graph the max/avg plots separately, using their own max to determine the bins/buckets
+		// gets max scores
+		for (Citance c : predictions.keySet()) {
+			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+						
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			if (d.sentences.size() == 0) {
+				System.err.println(d + " has 0 sentences");
+				System.exit(1);
+			}
+			// for each sentence, determines the max fill percentage across Annos and the avg fill perctange across Annos
+			for (Sentence s : d.sentences) {
+				Set<String> curReferenceTypes = removeStopwords(s.types);
+				double maxAnnoFill = 0;
+				double avgAnnoFill = 0;
+				for (Annotation a : c.annotations) {
+					double fillPercentage = a.theoreticFillInSentence(s.startPos, s.endPos); // the best reference offset only is returned
+					
+					if (fillPercentage > maxAnnoFill) {
+						maxAnnoFill = fillPercentage;
+					}
+					
+					avgAnnoFill += fillPercentage;
+				}
+				avgAnnoFill /= c.annotations.size();
+				
+				// gets jaccard sim score for the given sentence
+				double score = 0;
+				int intersection = 0;
+				for (String token : curReferenceTypes) {
+					if (citanceTypes.contains(token)) {
+						intersection++;
+					}
+				}
+				// ensures both the citance and reference sentences aren't just stopwords
+				if (curReferenceTypes.size() > 0 && citanceTypes.size() > 0 ) {
+					score = (double)intersection / ((double)(citanceTypes.size() + curReferenceTypes.size() - intersection));
+				}
+				
+				if (score > max) {
+					max = score;
+				}
+				if (score == 1) {
+					System.out.println("**** max score is 1!!");
+				}
+				if (maxAnnoFill >= maxThreshold) {
+					maxGoodScores.add(score);
+				} else {
+					maxBadScores.add(score);
+				}
+				
+				if (avgAnnoFill >= avgThreshold) {
+					avgGoodScores.add(score);
+				} else {
+					avgBadScores.add(score);
+				}
+			}
+
+		}
+		
+		// puts scores into their respective buckets
+		double bucketSize = (double)max / (double)numBuckets;
+		System.out.println("bucket size: " + bucketSize);
+		int[] maxGoodBins = new int[numBuckets];
+		int[] maxBadBins = new int[numBuckets];
+		int[] avgGoodBins = new int[numBuckets];
+		int[] avgBadBins = new int[numBuckets];
+		
+		for (double score : maxGoodScores) {
+			for (int i=0; i<numBuckets; i++) {
+				if (score >= i*bucketSize && score <= (i+1)*bucketSize) {
+					maxGoodBins[i]++;
+					break;
+				}
+			}
+		}
+		for (double score : maxBadScores) {
+			for (int i=0; i<numBuckets; i++) {
+				if (score >= i*bucketSize && score <= (i+1)*bucketSize) {
+					maxBadBins[i]++;
+					break;
+				}
+			}
+		}
+		for (double score : avgGoodScores) {
+			for (int i=0; i<numBuckets; i++) {
+				if (score >= i*bucketSize && score <= (i+1)*bucketSize) {
+					avgGoodBins[i]++;
+					break;
+				}
+			}
+		}
+		for (double score : avgBadScores) {
+			for (int i=0; i<numBuckets; i++) {
+				if (score >= i*bucketSize && score <= (i+1)*bucketSize) {
+					avgBadBins[i]++;
+					break;
+				}
+			}
+		}
+		System.out.println("total maxgoodscores: " + maxGoodScores.size() + "; max: " + max);
+		bout.write("jaccard sim, # sentences whose max anno > " + maxThreshold + ", # sentences whose max anno < " + maxThreshold + ", # sentences who avg anno > " + avgThreshold + ", # sentences who avg anno < " + avgThreshold + "\n");
+		for (int i=0; i<numBuckets; i++) {
+			bout.write(i*bucketSize + "-" + (i+1)*bucketSize + "," + maxGoodBins[i] + "," + maxBadBins[i] + "," + avgGoodBins[i] + "," + avgBadBins[i] + "\n");
+			//System.out.println(i*bucketSize + "-" + (i+1)*bucketSize + "," + bins[i]);
+		}
+		bout.close();
+	}
+
+
+	// just for debugging to understand the power of jaccard
+	private static void displayStats(Map<Citance, List<IndexPair>> predictions) throws IOException {
+		for (Citance c : predictions.keySet()) {
+			
+			System.out.println("\ncitance:" + c.citationText);
+			System.out.println("perfect annotations:\n");
+			
+			for (Annotation a : c.annotations) {
+				System.out.println("annotator " + a.annotator + ":");
+			}
+			// only tmp used for printing jaccard stuff
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+
+			Map<String, Double> sentenceToJaccard = new HashMap<String, Double>();
+			Map<String, Double> sentenceToFill = new HashMap<String, Double>();
+			
+			// look at the Citance's actual returned sentence
+			for (int i=0; i<predictions.get(c).size(); i++) {
+				
+				IndexPair eachSentenceMarkers = predictions.get(c).get(i);
+				
+				// only tmp used for printing jaccard stuff
+				Set<String> refTypes = new HashSet<String>();
+				String sent = d.originalText.substring(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+				String filteredRef = d.filterText(sent);
+				StringTokenizer st = new StringTokenizer(filteredRef, " ,.;\"");
+				while (st.hasMoreTokens()) {
+					String token = st.nextToken();
+					refTypes.add(token);
+				}
+				double jaccard = 0;
+				int intersection = 0;
+				for (String token : refTypes) {
+					if (citanceTypes.contains(token)) {
+						intersection++;
+					}
+				}
+				// ensures both the citance and reference sentences aren't just stopwords
+				if (refTypes.size() > 0 && citanceTypes.size() > 0 ) {
+					jaccard = (double)intersection / ((double)(citanceTypes.size() + refTypes.size() - intersection));
+				}
+				
+				double avgFill = 0;
+				for (Annotation a : c.annotations) {
+					double theoreticPercentage = a.theoreticFillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+					avgFill += theoreticPercentage;
+				}
+				avgFill /= c.annotations.size();
+				
+				sentenceToJaccard.put(sent, jaccard);
+				sentenceToFill.put(sent, avgFill);
+			}
+			
+			Iterator it = sortByValueDescending(sentenceToJaccard).keySet().iterator();
+			int j=0;
+			System.out.println("\tsorted by jaccard:");
+			while (it.hasNext() && j < 10) {
+				String sent = (String)it.next();
+				System.out.println("\t" + sentenceToJaccard.get(sent) + "\t" + sentenceToFill.get(sent) + "\t" + sent);
+				j++;
+			}
+			it = sortByValueDescending(sentenceToFill).keySet().iterator();
+
+			j=0;
+			System.out.println("\n\tsorted by avg fill across 4 annotators:");
+			while (it.hasNext() && j < 10) {
+				String sent = (String)it.next();
+				System.out.println("\t" + sentenceToJaccard.get(sent) + "\t" + sentenceToFill.get(sent) + "\t" + sent);
+				j++;
+			}
+		}
+	}
+	
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
 	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) throws IOException {
 		List<Double> recall = new ArrayList<Double>();
@@ -99,6 +330,14 @@ public class TACEvaluator {
 		
 		System.out.println("most sentences in any reference doc: " + maxLengthOfDoc);
 		for (Citance c : predictions.keySet()) {
+			
+			
+			//System.out.println("citance: " + c.citationText);
+			
+			// only tmp used for printing jaccard stuff
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			
 			for (Annotation a : c.annotations) {
 				
 				double lastFill = 0;
@@ -108,13 +347,40 @@ public class TACEvaluator {
 					if (i<predictions.get(c).size()) {
 						IndexPair eachSentenceMarkers = predictions.get(c).get(i);
 					
+						// only tmp used for printing jaccard stuff
+						Set<String> refTypes = new HashSet<String>();
+						String filteredRef = d.filterText(d.originalText.substring(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos));
+						StringTokenizer st = new StringTokenizer(filteredRef, " ,.;\"");
+						while (st.hasMoreTokens()) {
+							String token = st.nextToken();
+							refTypes.add(token);
+						}
+						double jaccard = 0;
+						int intersection = 0;
+						for (String token : refTypes) {
+							if (citanceTypes.contains(token)) {
+								intersection++;
+							}
+						}
+						// ensures both the citance and reference sentences aren't just stopwords
+						if (refTypes.size() > 0 && citanceTypes.size() > 0 ) {
+							jaccard = (double)intersection / ((double)(citanceTypes.size() + refTypes.size() - intersection));
+						}
 						double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
 						lastFill = fillPercentage;
+						if (i < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
+							double theoreticPercentage = a.theoreticFillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+							System.out.println("we have 2 " + i + " " + jaccard + "\t" + theoreticPercentage + ": " + d.originalText.substring(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos));
+						} else {
+							//System.exit(1);
+						}
 					}
 					List<Double> tmp = new ArrayList<Double>();
 					if (recallSums.containsKey(i)) {
 						tmp = recallSums.get(i);
 					}
+					
+					// this block is just for debugging
 					if (i == maxLengthOfDoc-1 && lastFill < 0.5) {
 						System.out.println("lastfill: " + lastFill);
 						for (IndexPair ip : a.referenceOffsets) {
@@ -170,6 +436,7 @@ public class TACEvaluator {
 			vocab.addAll(tmo.topicToWordProbabilities.get(t).keySet());
 		}
 		System.out.println("# unique words (aka types):" + vocab.size());
+		System.out.println("topic vocab: " + vocab);
 		
 		// calculates P(Z)
 		double totalProb = 0;
@@ -227,7 +494,6 @@ public class TACEvaluator {
 			for (String w : citanceWords) {
 				if (!vocab.contains(w)) {
 					wordsNotFound.add(w);
-					System.out.println("didn't find " + w);
 				}
 			}
 			
@@ -247,10 +513,10 @@ public class TACEvaluator {
 				double cosineScore = getCosineSim(citanceDistribution, referenceSentDistribution);
 				double klScore = getKL(citanceDistribution, referenceSentDistribution);
 				
-				sentenceScores.put(s, cosineScore);
+				sentenceScores.put(s, 1-klScore);
 			}
 			
-			System.out.println("citance:" + c.citationText);
+			//System.out.println("citance:" + c.citationText);
 			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
 			while (it.hasNext()) {
 				Sentence s = (Sentence)it.next();
@@ -264,7 +530,7 @@ public class TACEvaluator {
 				System.out.println("we have 0 sentence markers for citance " + c);
 			}
 		}
-		System.out.println("# unique words NOT FOUND (aka types):" + wordsNotFound.size());
+		System.out.println("# unique words NOT FOUND (aka types):" + wordsNotFound.size() + ": " + wordsNotFound);
 		return ret;
 	}
 	
@@ -476,9 +742,10 @@ public class TACEvaluator {
 				sentenceScores.put(s, rand.nextDouble());
 			}
 			
+			// adds a randomly chosen perfect Annotation
 			Annotation perfect = c.annotations.get(rand.nextInt(c.annotations.size()));
 			for (IndexPair ip : perfect.referenceOffsets) {
-				sentenceMarkers.add(ip);
+				//sentenceMarkers.add(ip); 
 			}
 			
 			System.out.println("citance:" + c.citationText);
@@ -511,6 +778,7 @@ public class TACEvaluator {
 			
 			// the non-stoplist types from the Citance
 			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			
 			//System.out.println("CITANCE: " + citanceTypes);
 			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
 
@@ -524,7 +792,7 @@ public class TACEvaluator {
 				Set<String> curReferenceTypes = removeStopwords(s.types);
 				//System.out.println("REFERENCE:" + curReferenceTypes);
 				double score = 0;
-				int intersection  = 0;
+				int intersection = 0;
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
 						intersection++;
@@ -538,14 +806,20 @@ public class TACEvaluator {
 				sentenceScores.put(s, score);
 			}
 			
-			System.out.println("citance:" + c.citationText);
+			//System.out.println("citance:" + c.citationText);
 			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
+			int tmp=0;
+
 			while (it.hasNext()) {
 				Sentence s = (Sentence)it.next();
 				IndexPair i = new IndexPair(s.startPos, s.endPos);
 				sentenceMarkers.add(i);
 				
+				if (tmp < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
+					//System.out.println("we have:" + sentenceScores.get(s) + " = " + s.sentence);
+				}
 				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
+				tmp++;
 			}
 			ret.put(c, sentenceMarkers);
 			if (sentenceMarkers.size() == 0) {
