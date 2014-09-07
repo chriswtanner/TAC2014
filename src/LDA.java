@@ -31,7 +31,7 @@ public class LDA {
 	double ldaAlpha = 50;
 	double ldaGamma = 0.01; // was 0.1
 	int optimizeInterval = 100;
-	int numIterations = 2000; // 3,000
+	int numIterations = 200; // 3,000
 	//double totalFlutter = 0.05;
     double padding = 0.00001;
 	int numTopics = 50; // 50
@@ -184,18 +184,20 @@ public class LDA {
             }
             
             // normalizes P(W|Z) weights -- iterates over ALL words, even ones not in the topic
-            //System.out.println("topic:" + topic);
+            System.out.println("topic:" + topic);
             for (String word : wordCountsTotal.keySet()) {
             	wordCountsProb.put(word, wordCountsTotal.get(word) / total);
             }
             this.topicToWordProbabilities.put(topic, wordCountsProb);
             
             Iterator it = sortByValueDescending(wordCountsProb).keySet().iterator();
-            while (it.hasNext()) {
+            int i=0;
+            while (it.hasNext() && i<50) {
             	String word = (String)it.next();
-            	//System.out.println(word + "=" + wordCountsProb.get(word));
+            	System.out.print(word + ",");// + "=" + wordCountsProb.get(word));
+            	i++;
             }
-            
+            System.out.println("\n");
         } // end of setting P(W|Z)
         
         // stores every P(Z|D)
@@ -213,7 +215,6 @@ public class LDA {
         	System.out.println("");
         	this.docToTopicProbabilities.put(curFilename, tmp);
         }
-        
         System.out.println("done with LDA!");
 	}
 

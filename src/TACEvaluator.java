@@ -26,7 +26,7 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
-	static String method = "jaccard"; //lda";
+	static String method = "lda"; //lda";
 	
 	static Set<String> stopwords;
 	
@@ -58,6 +58,7 @@ public class TACEvaluator {
 			l.runLDA();
 			l.saveLDA(ldaObject);
 		}
+		//System.exit(1);
 		
 		// runs the lda-saved model to create topics per sentence
 		Map<Citance, List<IndexPair>> predictions = null;
@@ -76,9 +77,8 @@ public class TACEvaluator {
 		}
 		
 		//List<Double> recall = scorePredictions(predictions);
-		displayStats(predictions);
+		//displayStats(predictions);
 		//printSimilarityStats(predictions, 50);
-
 	}
 
 
@@ -240,17 +240,42 @@ public class TACEvaluator {
 
 	// just for debugging to understand the power of jaccard
 	private static void displayStats(Map<Citance, List<IndexPair>> predictions) throws IOException {
+		int citanceNum=0;
 		for (Citance c : predictions.keySet()) {
+			// only tmp used for printing jaccard stuff
+			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			
-			System.out.println("\ncitance:" + c.citationText);
-			System.out.println("perfect annotations:\n");
+			System.out.println("\ncitance " + citanceNum++ + ":" + c.citationText);
+			System.out.println("\nperfect annotations:");
 			
 			for (Annotation a : c.annotations) {
 				System.out.println("annotator " + a.annotator + ":");
+				for (IndexPair ip : a.referenceOffsets) {
+					String raw = d.originalText.substring(ip.startPos, ip.endPos);
+					//System.out.println("raw: " + raw);
+					Set<String> annoTypes = new HashSet<String>();
+					String filteredRef = d.filterText(raw);
+					StringTokenizer st = new StringTokenizer(filteredRef, " ,.;\"");
+					while (st.hasMoreTokens()) {
+						String token = st.nextToken();
+						annoTypes.add(token);
+					}
+					double jaccard = 0;
+					int intersection = 0;
+					for (String token : annoTypes) {
+						if (citanceTypes.contains(token)) {
+							intersection++;
+						}
+					}
+					// ensures both the citance and reference sentences aren't just stopwords
+					if (annoTypes.size() > 0 && citanceTypes.size() > 0 ) {
+						jaccard = (double)intersection / ((double)(citanceTypes.size() + annoTypes.size() - intersection));
+					}
+					System.out.println("\t" + jaccard + "\t" + raw);
+				}
 			}
-			// only tmp used for printing jaccard stuff
-			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+
 
 			Map<String, Double> sentenceToJaccard = new HashMap<String, Double>();
 			Map<String, Double> sentenceToFill = new HashMap<String, Double>();
@@ -294,7 +319,7 @@ public class TACEvaluator {
 			
 			Iterator it = sortByValueDescending(sentenceToJaccard).keySet().iterator();
 			int j=0;
-			System.out.println("\tsorted by jaccard:");
+			System.out.println("\n\tour top 10 returned sentences (per jaccard sim):");
 			while (it.hasNext() && j < 10) {
 				String sent = (String)it.next();
 				System.out.println("\t" + sentenceToJaccard.get(sent) + "\t" + sentenceToFill.get(sent) + "\t" + sent);
@@ -303,7 +328,7 @@ public class TACEvaluator {
 			it = sortByValueDescending(sentenceToFill).keySet().iterator();
 
 			j=0;
-			System.out.println("\n\tsorted by avg fill across 4 annotators:");
+			System.out.println("\n\tthe actual top 10 sentences (per avg char. overlap w/ golden truth across 4 annotators):");
 			while (it.hasNext() && j < 10) {
 				String sent = (String)it.next();
 				System.out.println("\t" + sentenceToJaccard.get(sent) + "\t" + sentenceToFill.get(sent) + "\t" + sent);
@@ -338,7 +363,12 @@ public class TACEvaluator {
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
 			
-			for (Annotation a : c.annotations) {
+			for (int x=0; x<c.annotations.size(); x++) {
+
+				if (method.equals("perfect") && x==0) {
+					continue;
+				}
+				Annotation a = c.annotations.get(x);
 				
 				double lastFill = 0;
 				for (int i=0; i<maxLengthOfDoc; i++) {
@@ -389,9 +419,9 @@ public class TACEvaluator {
 							System.out.println(ip + " => " + c.referenceDoc + " => " + docs.get(c.topicID + ":" + c.referenceDoc).originalText.substring(ip.startPos, ip.endPos));
 						}
 						System.out.println("our sentence markers:");
-						for (int x=0; x<predictions.get(c).size(); x++) {
+						//for (int x=0; x<predictions.get(c).size(); x++) {
 							//System.out.println(predictions.get(c).get(x));
-						}
+						//}
 						//break;
 						//System.exit(1);
 					}
@@ -508,6 +538,11 @@ public class TACEvaluator {
 				List<String> curReferenceTypes = removeStopwords(s.tokens);
 				//System.out.println("sentence types:" + curReferenceTypes);
 				
+				for (String w : curReferenceTypes) {
+					if (!vocab.contains(w)) {
+						wordsNotFound.add(w);
+					}
+				}
 				double[] referenceSentDistribution = getSentenceDistribution(curReferenceTypes, wordToTopicProbs, numTopics);
 				
 				double cosineScore = getCosineSim(citanceDistribution, referenceSentDistribution);
@@ -530,6 +565,12 @@ public class TACEvaluator {
 				System.out.println("we have 0 sentence markers for citance " + c);
 			}
 		}
+		
+		TODO:
+		- look at some exact words below like 'icrosio' and find out where they are (via recursive grep?), and why are they not making it into mallet-tac.txt
+		- then, once i figure that out, is mallet's preprocessor throwing away any words?
+		- move to PLSA.  performance?
+		- remove words appearing in > 60% docs and < 2 docs.  performance?
 		System.out.println("# unique words NOT FOUND (aka types):" + wordsNotFound.size() + ": " + wordsNotFound);
 		return ret;
 	}
@@ -743,9 +784,9 @@ public class TACEvaluator {
 			}
 			
 			// adds a randomly chosen perfect Annotation
-			Annotation perfect = c.annotations.get(rand.nextInt(c.annotations.size()));
+			Annotation perfect = c.annotations.get(0); //rand.nextInt(c.annotations.size()));
 			for (IndexPair ip : perfect.referenceOffsets) {
-				//sentenceMarkers.add(ip); 
+				sentenceMarkers.add(ip); 
 			}
 			
 			System.out.println("citance:" + c.citationText);
