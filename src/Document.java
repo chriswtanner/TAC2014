@@ -47,8 +47,15 @@ public class Document {
 	    // and if we see endPunctuation (.!?;) followed by a space, we'll require that we've seen at least 40 chars to make a sentence
     	boolean foundIntro = false;
     	int startIndex = 0;
+    	int bracketCount = 0;
 	    for (int i=0; i<originalText.length(); i++) {
 	    	char c = originalText.charAt(i);
+	    	
+	    	if (c == '(') {
+	    		bracketCount++;
+	    	} else if (c == ')') {
+	    		bracketCount = Math.max(0, bracketCount-1);
+	    	}
 	    	
 	    	// checks if we just started a new line
 	    	if (i>0 && originalText.charAt(i-1) == '\n') {
@@ -65,6 +72,7 @@ public class Document {
 	    			break;
 	    		}
 	    		startIndex = i;
+	    		bracketCount = 0;
 	    	}
 
 	    	// checks if current char is an endPunct char (e.g. .,;!?)
@@ -93,7 +101,7 @@ public class Document {
 	    			break;
 	    		}
 	    	}
-	    	if (/*foundIntro && */(i - startIndex) >= minNumCharsPerSentence && (c == '\n' || isEndPunct)) {
+	    	if (/*foundIntro && */(i - startIndex) >= minNumCharsPerSentence && (c == '\n' || isEndPunct) && bracketCount == 0) {
 	    		
 	    		if (c != '\n') {
 	    			i++;
@@ -103,6 +111,7 @@ public class Document {
 	    		Sentence s = new Sentence(startIndex, i-1, filteredText);
 	    		sentences.add(s);
 	    		startIndex = i+1;
+	    		bracketCount = 0;
 	    	} else if (c == '\n' && !foundIntro) {
     			boolean isIntroSection = false;
     			
@@ -111,6 +120,7 @@ public class Document {
     				
     				if (curLine.equals(intro)) {
 	    				isIntroSection = true;
+	    				//System.out.println("we found:" + intro);
 	    			}
     			}
     			if (isIntroSection) {

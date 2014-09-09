@@ -79,8 +79,17 @@ def main():
                             isBad = True
                             continue
                     if (not isBad):
-                        oneline += (line + " ")
-            oneline = oneline.strip()
+                        tmp = line.replace(",", " ")
+                        tmp = tmp.replace(".", " ")
+                        tmp = tmp.replace(";", " ")
+                        tmp = tmp.replace("\"", " ")
+                        x = tmp.split(" ")
+                        for y in x:
+                            oneline += (y + " ")
+                        #oneline += (line + " ")
+
+            oneline = oneline.strip().lower()
+            print oneline
             malletOut.write(fileID + " " + fileID + " " + oneline + "\n");
 
         if (not foundIntro):

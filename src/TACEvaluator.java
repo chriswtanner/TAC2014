@@ -20,6 +20,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import cc.mallet.util.CommandOption.File;
+
 public class TACEvaluator {
 
 	// NOTE: simply change this value
@@ -50,6 +52,12 @@ public class TACEvaluator {
 		
 		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		docs = loadReferenceDocuments(annoInputFile);
+		
+		todo:
+			- my mallet was getting messed up because i was relying on the python preprocessing script
+			- isntead, i do all hte legwork here in loadReferencedocuments(), so just load the citance docs too
+			- and tell it to export the mallet-tac file.  this way i KNOW all the tokens will match up.  this will hopefully
+			  improve perofmrance of the sytsem across the board, but also just make it more fair and legit of experiments
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
@@ -76,7 +84,7 @@ public class TACEvaluator {
 			predictions = getPerfectPredictions(docs, citances);
 		}
 		
-		//List<Double> recall = scorePredictions(predictions);
+		List<Double> recall = scorePredictions(predictions);
 		//displayStats(predictions);
 		//printSimilarityStats(predictions, 50);
 	}
@@ -523,6 +531,9 @@ public class TACEvaluator {
 
 			for (String w : citanceWords) {
 				if (!vocab.contains(w)) {
+					if (w.equals("hematologist/oncologist")) {
+						System.out.println("*** citance " + c + " has hematologist/oncologist!");
+					}
 					wordsNotFound.add(w);
 				}
 			}
@@ -541,6 +552,9 @@ public class TACEvaluator {
 				for (String w : curReferenceTypes) {
 					if (!vocab.contains(w)) {
 						wordsNotFound.add(w);
+						if (w.equals("hematologist/oncologist")) {
+							System.out.println("*** ref sentence in doc " + d.name + " has hematologist/oncologist!");
+						}
 					}
 				}
 				double[] referenceSentDistribution = getSentenceDistribution(curReferenceTypes, wordToTopicProbs, numTopics);
@@ -566,11 +580,13 @@ public class TACEvaluator {
 			}
 		}
 		
+		/*
 		TODO:
 		- look at some exact words below like 'icrosio' and find out where they are (via recursive grep?), and why are they not making it into mallet-tac.txt
 		- then, once i figure that out, is mallet's preprocessor throwing away any words?
 		- move to PLSA.  performance?
 		- remove words appearing in > 60% docs and < 2 docs.  performance?
+		*/
 		System.out.println("# unique words NOT FOUND (aka types):" + wordsNotFound.size() + ": " + wordsNotFound);
 		return ret;
 	}
