@@ -29,6 +29,8 @@ public class TACEvaluator {
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
 	static String method = "lda"; //lda";
+	static Integer minNumDocs = 2;
+	static Double maxPercentDocs = .8;
 	
 	static Set<String> stopwords;
 	
@@ -44,20 +46,20 @@ public class TACEvaluator {
 	static Map<String, Document> docs = new HashMap<String, Document>();
 	
 	// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
-	static String ldaObject = dataDir + "lda_50z_2000i.ser";
+	static String ldaObject = dataDir + "lda_25z_2000i.ser";
+	
+	static Set<String> badWords = new HashSet<String>();
 	
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
 	
 		stopwords = loadStopwords(stopwordsFile);
 		
+		makeMalletFileAndGetBadWords(malletInputFile);
+		
+		//System.exit(1);
 		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		docs = loadReferenceDocuments(annoInputFile);
-		
-		todo:
-			- my mallet was getting messed up because i was relying on the python preprocessing script
-			- isntead, i do all hte legwork here in loadReferencedocuments(), so just load the citance docs too
-			- and tell it to export the mallet-tac file.  this way i KNOW all the tokens will match up.  this will hopefully
-			  improve perofmrance of the sytsem across the board, but also just make it more fair and legit of experiments
+
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
@@ -90,6 +92,116 @@ public class TACEvaluator {
 	}
 
 
+	private static void makeMalletFileAndGetBadWords(String malletOutput) throws IOException {
+		//Map<String, Document> ret = new HashMap<String, Document>();
+		
+
+		BufferedReader bin = new BufferedReader(new FileReader(annoInputFile));
+		String curLine = "";
+		Map<String, Document> docs = new HashMap<String, Document>();
+		
+		// reads each line of annoInputFile, while looking for 'topicID' and 'reference article' fields,
+		// in order to know the proper location of the file for which we wish to create a Document
+		while ((curLine = bin.readLine())!=null) {
+			StringTokenizer st = new StringTokenizer(curLine, "|");
+			String topicID = "";
+			String doc = "";
+
+			while (st.hasMoreTokens()) {
+
+				String field = st.nextToken().trim();
+				//System.out.println("t:" + field);
+				if (field.startsWith("Topic ID:")) {
+					String[] tokens = field.split(" ");
+					topicID = tokens[2];
+				} else if (field.startsWith("Reference Article:")) {
+					//System.out.println("ref:" + field);
+					StringTokenizer st2 = new StringTokenizer(field);
+					//String[] tokens = field.split(" ");
+					//sourceName = tokens[2];
+					st2.nextToken();
+					st2.nextToken();
+					doc = st2.nextToken();
+					//String id = topicID + "_" + doc;
+					if (!docs.containsKey(topicID + "_" + doc)) {
+						Document d = new Document(docDir, topicID, doc);
+						docs.put(topicID + "_" + doc, d);
+					}
+					//System.out.println("source: " + sourceName);
+				} else if (field.startsWith("Citing Article:")) {
+					StringTokenizer st2 = new StringTokenizer(field);
+					st2.nextToken();
+					st2.nextToken();
+					doc = st2.nextToken();
+					if (!docs.containsKey(topicID + "_" + doc)) {
+						Document d = new Document(docDir, topicID, doc);
+						docs.put(topicID + "_" + doc, d);
+					}
+					System.out.println("CITING ARTICLE!: " + doc);
+				}
+			}
+		}
+		
+		// goes through all docs (citing and reference docs) and writes to the mallet output file
+		BufferedWriter bout = new BufferedWriter(new FileWriter(malletOutput));
+		
+		Map<String, Set<String>> wordToDocs = new HashMap<String, Set<String>>();
+		
+		// goes through once to first find all bad words
+		for (String doc : docs.keySet()) {
+			Set<String> docTypes = new HashSet<String>();
+			
+			Document d = docs.get(doc);
+			for (Sentence s : d.sentences) {
+				List<String> curReferenceTypes = removeStopwordsAndBadWords(s.tokens);
+				docTypes.addAll(curReferenceTypes);
+			}
+			
+			for (String w : docTypes) {
+				Set<String> tmp = new HashSet<String>();
+				if (wordToDocs.containsKey(w)) {
+					tmp = wordToDocs.get(w);
+				}
+				tmp.add(doc);
+				wordToDocs.put(w, tmp);
+			}
+		}
+		for (String w : wordToDocs.keySet()) {
+			int numDocs = wordToDocs.get(w).size();
+			double percent = (double)numDocs / (double)docs.keySet().size();
+			if (numDocs < minNumDocs || percent > maxPercentDocs || w.length() == 1) {
+				badWords.add(w);
+			}
+		}
+		System.out.println(badWords.size() + " of " + wordToDocs.keySet().size() + " (" + (double)badWords.size()/(double)wordToDocs.keySet().size()  +") words were bad: " + badWords);
+		
+		// goes through again and writes the mallet file for the good words
+		for (String doc : docs.keySet()) {
+
+			Document d = docs.get(doc);
+			bout.write(d.topicID + "_" + d.name + " " + d.topicID + "_" + d.name);
+			for (Sentence s : d.sentences) {
+				List<String> curReferenceTokens = removeStopwordsAndBadWords(s.tokens);
+				for (String w : curReferenceTokens) {
+					if (!badWords.contains(w)) {
+						bout.write(" " + w);
+					}
+				}
+			}
+			bout.write("\n");
+		}
+		bout.close();
+	}
+
+
+	private static String getMalletLine(String docDir, String topicID, String doc) {
+		// TODO Auto-generated method stub
+		String ret = "";
+		
+		return ret;
+	}
+
+
 	private static void printSimilarityStats(Map<Citance, List<IndexPair>> predictions, int numBuckets) throws IOException {
 		
 		BufferedWriter bout = new BufferedWriter(new FileWriter(statsOut));
@@ -107,7 +219,7 @@ public class TACEvaluator {
 		
 		// fills in the perfect, golden annotations
 		for (Citance c : predictions.keySet()) {
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 			for (Annotation a : c.annotations) {
 				
 				Set<String> ret = new HashSet<String>();
@@ -115,7 +227,7 @@ public class TACEvaluator {
 				while (st.hasMoreTokens()) {
 					ret.add(st.nextToken());
 				}
-				Set<String> annoTypes = removeStopwords(ret);
+				Set<String> annoTypes = removeStopwordsAndBadWords(ret);
 				double score = 0;
 				int intersection  = 0;
 				for (String token : annoTypes) {
@@ -139,7 +251,7 @@ public class TACEvaluator {
 		max = 0; // resets the max because we'll graph the max/avg plots separately, using their own max to determine the bins/buckets
 		// gets max scores
 		for (Citance c : predictions.keySet()) {
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 						
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			if (d.sentences.size() == 0) {
@@ -148,7 +260,7 @@ public class TACEvaluator {
 			}
 			// for each sentence, determines the max fill percentage across Annos and the avg fill perctange across Annos
 			for (Sentence s : d.sentences) {
-				Set<String> curReferenceTypes = removeStopwords(s.types);
+				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
 				double maxAnnoFill = 0;
 				double avgAnnoFill = 0;
 				for (Annotation a : c.annotations) {
@@ -251,7 +363,7 @@ public class TACEvaluator {
 		int citanceNum=0;
 		for (Citance c : predictions.keySet()) {
 			// only tmp used for printing jaccard stuff
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			
 			System.out.println("\ncitance " + citanceNum++ + ":" + c.citationText);
@@ -369,7 +481,7 @@ public class TACEvaluator {
 			
 			// only tmp used for printing jaccard stuff
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 			
 			for (int x=0; x<c.annotations.size(); x++) {
 
@@ -469,13 +581,19 @@ public class TACEvaluator {
 		int numTopics = tmo.topicToWordProbabilities.keySet().size();
 		Map<String, Map<Integer, Double>> wordToTopicProbs = new HashMap<String, Map<Integer, Double>>();
 		
-		Set<String> vocab = new HashSet<String>();
+		Set<String> malletVocab = new HashSet<String>();
 		for (Integer t : tmo.topicToWordProbabilities.keySet()) {
-			vocab.addAll(tmo.topicToWordProbabilities.get(t).keySet());
+			malletVocab.addAll(tmo.topicToWordProbabilities.get(t).keySet());
 		}
-		System.out.println("# unique words (aka types):" + vocab.size());
-		System.out.println("topic vocab: " + vocab);
+		System.out.println("# unique words (aka types):" + malletVocab.size());
+		System.out.println("topic vocab: " + malletVocab);
 		
+		if (malletVocab.contains("randomize")) {
+			System.out.println("mallet has randomize!");
+		}
+		if (badWords.contains("randomize")) {
+			System.out.println("badWords has randomize!");
+		}
 		// calculates P(Z)
 		double totalProb = 0;
 		double[] p_z = new double[numTopics];
@@ -495,7 +613,7 @@ public class TACEvaluator {
 		}
 		
 		// calculates P(Z|W) for each w in vocab:
-		for (String w : vocab) {
+		for (String w : malletVocab) {
 			double denomZ = 0;
 			double[] topicProbs = new double[numTopics];
 			
@@ -526,14 +644,16 @@ public class TACEvaluator {
 			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
 			
 			// the non-stoplist types from the Citance
-			List<String> citanceWords = removeStopwords(c.getTextTokensAsList());
+			List<String> citanceWords = removeStopwordsAndBadWords(c.getTextTokensAsList());
 			double[] citanceDistribution = getSentenceDistribution(citanceWords, wordToTopicProbs, numTopics);
 
 			for (String w : citanceWords) {
-				if (!vocab.contains(w)) {
-					if (w.equals("hematologist/oncologist")) {
-						System.out.println("*** citance " + c + " has hematologist/oncologist!");
+				if (!malletVocab.contains(w)) {
+					
+					if (w.equals("randomize")) {
+						System.out.println("*** citance " + c + " has randomize");
 					}
+					
 					wordsNotFound.add(w);
 				}
 			}
@@ -546,15 +666,17 @@ public class TACEvaluator {
 				System.exit(1);
 			}
 			for (Sentence s : d.sentences) {
-				List<String> curReferenceTypes = removeStopwords(s.tokens);
+				List<String> curReferenceTypes = removeStopwordsAndBadWords(s.tokens);
 				//System.out.println("sentence types:" + curReferenceTypes);
 				
 				for (String w : curReferenceTypes) {
-					if (!vocab.contains(w)) {
+					if (!malletVocab.contains(w)) {
 						wordsNotFound.add(w);
-						if (w.equals("hematologist/oncologist")) {
-							System.out.println("*** ref sentence in doc " + d.name + " has hematologist/oncologist!");
+						
+						if (w.equals("randomize")) {
+							System.out.println("*** ref sentence in doc " + d.name + " has randomize");
 						}
+						
 					}
 				}
 				double[] referenceSentDistribution = getSentenceDistribution(curReferenceTypes, wordToTopicProbs, numTopics);
@@ -562,7 +684,7 @@ public class TACEvaluator {
 				double cosineScore = getCosineSim(citanceDistribution, referenceSentDistribution);
 				double klScore = getKL(citanceDistribution, referenceSentDistribution);
 				
-				sentenceScores.put(s, 1-klScore);
+				sentenceScores.put(s, cosineScore);
 			}
 			
 			//System.out.println("citance:" + c.citationText);
@@ -580,13 +702,6 @@ public class TACEvaluator {
 			}
 		}
 		
-		/*
-		TODO:
-		- look at some exact words below like 'icrosio' and find out where they are (via recursive grep?), and why are they not making it into mallet-tac.txt
-		- then, once i figure that out, is mallet's preprocessor throwing away any words?
-		- move to PLSA.  performance?
-		- remove words appearing in > 60% docs and < 2 docs.  performance?
-		*/
 		System.out.println("# unique words NOT FOUND (aka types):" + wordsNotFound.size() + ": " + wordsNotFound);
 		return ret;
 	}
@@ -772,7 +887,7 @@ public class TACEvaluator {
 			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
 			
 			// the non-stoplist types from the Citance
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 			
 			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
 			// looks within the relevant reference doc (aka source doc)
@@ -782,7 +897,7 @@ public class TACEvaluator {
 			
 			Random rand = new Random();
 			for (Sentence s : d.sentences) {
-				Set<String> curReferenceTypes = removeStopwords(s.types);
+				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
 				//System.out.println("sentence types:" + curReferenceTypes);
 				double score = 0;
 				int intersection  = 0;
@@ -834,7 +949,7 @@ public class TACEvaluator {
 			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
 			
 			// the non-stoplist types from the Citance
-			Set<String> citanceTypes = removeStopwords(c.getTextTokensAsSet());
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 			
 			//System.out.println("CITANCE: " + citanceTypes);
 			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
@@ -846,7 +961,7 @@ public class TACEvaluator {
 				System.exit(1);
 			}
 			for (Sentence s : d.sentences) {
-				Set<String> curReferenceTypes = removeStopwords(s.types);
+				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
 				//System.out.println("REFERENCE:" + curReferenceTypes);
 				double score = 0;
 				int intersection = 0;
@@ -903,20 +1018,20 @@ public class TACEvaluator {
 		return result;
 	}
 
-	private static Set<String> removeStopwords(Set<String> tokens) {
+	private static Set<String> removeStopwordsAndBadWords(Set<String> tokens) {
 		Set<String> ret = new HashSet<String>();
 		for (String t : tokens) {
-			if (!stopwords.contains(t)) {
+			if (!stopwords.contains(t) && !badWords.contains(t)) {
 				ret.add(t);
 			}
 		}
 		return ret;
 	}
 
-	private static List<String> removeStopwords(List<String> tokens) {
+	private static List<String> removeStopwordsAndBadWords(List<String> tokens) {
 		List<String> ret = new ArrayList<String>();
 		for (String t : tokens) {
-			if (!stopwords.contains(t)) {
+			if (!stopwords.contains(t) && !badWords.contains(t)) {
 				ret.add(t);
 			}
 		}

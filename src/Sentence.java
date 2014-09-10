@@ -22,9 +22,6 @@ public class Sentence {
 		StringTokenizer st = new StringTokenizer(s, " ,.;\"");
 		while (st.hasMoreTokens()) {
 			String token = st.nextToken();
-			if (token.equals("icrosio")) {
-				System.out.println("token is icrosio and original was " + s);
-			}
 			types.add(token);
 			tokens.add(token);
 		}

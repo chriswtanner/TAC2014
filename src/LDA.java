@@ -31,10 +31,10 @@ public class LDA {
 	double ldaAlpha = 50;
 	double ldaGamma = 0.01; // was 0.1
 	int optimizeInterval = 100;
-	int numIterations = 200; // 3,000
+	int numIterations = 2000; // 3,000
 	//double totalFlutter = 0.05;
     double padding = 0.00001;
-	int numTopics = 50; // 50
+	int numTopics = 25; // 50
 	String malletInput = "";
 	String malletStopwords = "";
 	
