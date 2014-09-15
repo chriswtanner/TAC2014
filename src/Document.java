@@ -7,8 +7,10 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.StringTokenizer;
 
 import org.apache.commons.*;
@@ -23,10 +25,10 @@ import java.nio.file.Path;
 public class Document {
 	String topicID = "";
 	String name = "";
-	byte[] bytesSpanned;
+	Set<Integer> bytesSpanned = new HashSet<Integer>();
+	//byte[] bytesSpanned;
 	String originalText = "";
 	int minNumCharsPerSentence = 40;
-	
 	
 	// represents the start and end character positions of all sentence, relative to 'originalText'
 	// e.g., originalText will start with header info, 
@@ -49,7 +51,7 @@ public class Document {
 	    File f = new File(file);
 	    FileInputStream fin = new FileInputStream(f);
 	    originalText = IOUtils.toString(fin, "UTF-8").replaceAll("\r", ""); //FileUtils.readFileToString(f);
-	    bytesSpanned = new byte[originalText.length()];
+	    bytesSpanned = new HashSet<Integer>(); //new byte[originalText.length()];
 	    
 	    fin.close();
 	    
@@ -229,14 +231,36 @@ public class Document {
 
 	public void fillBytes(IndexPair sentenceMarkers) {
 		for (int i=sentenceMarkers.startPos; i<=sentenceMarkers.endPos; i++) {
-			bytesSpanned[i] = 1;
+			bytesSpanned.add(i); //bytesSpanned[i] = 1;
 		}
 	}
 	
 	public void clearBytes() {
-		bytesSpanned = new byte[originalText.length()];
+		bytesSpanned = new HashSet<Integer>(); //new byte[originalText.length()];
 	}
 	public String toString() {
 		return this.name + " (" + this.topicID + ") has " + this.sentences.size() + " sentences";
+	}
+
+	public double calculateWeightedF1(List<Annotation> annotations) {
+		
+		// calculates weighted recall
+		int numBytesShared = 0;
+		int recallDenom = 0;
+		for (Annotation a : annotations) {
+			for (Integer byteFilled : a.goldenBytes) {
+				if (this.bytesSpanned.contains(byteFilled)) {
+					numBytesShared++;
+				}
+			}
+			recallDenom += a.totalPos;
+		}
+		double wRecall = 0.000001 + (double)numBytesShared / (double)recallDenom;
+
+		// calculates weighted precision
+		double precisionDenom = (double)this.bytesSpanned.size()*annotations.size();
+		double wPrecision = 0.000001 + (double)numBytesShared / precisionDenom;
+		
+		return 2*(wPrecision*wRecall)/(wPrecision + wRecall);
 	}
 }

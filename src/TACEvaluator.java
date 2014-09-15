@@ -27,8 +27,8 @@ public class TACEvaluator {
 	// NOTE: simply change this value
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
-	static boolean runLDA = false;
-	static String method = "jaccard"; //lda";
+	static boolean runLDA = true;
+	static String method = "lda"; //lda";
 	static Integer minNumDocs = 2;
 	static Double maxPercentDocs = .8;
 	
@@ -546,8 +546,8 @@ public class TACEvaluator {
 	
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
 	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) throws IOException {
-		List<Double> recall = new ArrayList<Double>();
-		Map<Integer, List<Double>> recallSums = new HashMap<Integer, List<Double>>();
+		List<Double> f1 = new ArrayList<Double>();
+		Map<Integer, List<Double>> f1Sums = new HashMap<Integer, List<Double>>();
 		BufferedWriter bout = new BufferedWriter(new FileWriter(resultsOut));
 		
 		// first determine max # of sentences because we want longer docs to still include stats from the shorter docs...
@@ -588,16 +588,31 @@ public class TACEvaluator {
 						
 					}
 					//lastFill = fillPercentage;
-					double weightedF1 = 
-							
-							TODO:
-								- where does weightedF1 and lastFIll go?
-								- make it calculate F1 based on each perAnno
+					double weightedF1 = d.calculateWeightedF1(c.annotations);
+					lastF1 = weightedF1;
 				}
+				
+				List<Double> tmp = new ArrayList<Double>();
+				if (f1Sums.containsKey(i)) {
+					tmp = f1Sums.get(i);
+				}
+				tmp.add(lastF1);
+				f1Sums.put(i, tmp);
 			}
 		}
-			
-			
+		bout.write("# sentences,avg character weighted F1 %\n");
+		for (int i=0; i<f1Sums.keySet().size(); i++) {
+			double sum = 0;
+			for (double d : f1Sums.get(i)) {
+				sum += d;
+			}
+			f1.add(sum / (double)f1Sums.get(i).size()); // calculates the average
+			bout.write(i + "," + f1.get(i) + "\n");
+			System.out.println(i + "," + f1.get(i));
+		}
+		bout.close();
+		return f1;
+		/*
 			
 			for (int x=0; x<c.annotations.size(); x++) {
 
@@ -634,25 +649,17 @@ public class TACEvaluator {
 							jaccard = (double)intersection / ((double)(citanceTypes.size() + refTypes.size() - intersection));
 						}
 						
-						//double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
-						//lastFill = fillPercentage;
-						double weightedF1 = a.
+						double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+						lastFill = fillPercentage;
 						
-						/*
-						if (i < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
-							double theoreticPercentage = a.theoreticFillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
-							System.out.println("we have 2 " + i + " " + jaccard + "\t" + theoreticPercentage + ": " + d.originalText.substring(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos));
-						} else {
-							//System.exit(1);
-						}
-						*/
+						
 					}
 					List<Double> tmp = new ArrayList<Double>();
 					if (recallSums.containsKey(i)) {
 						tmp = recallSums.get(i);
 					}
 					
-					/*
+					
 					// this block is just for debugging
 					if (i == maxLengthOfDoc-1 && lastFill < 0.5) {
 						System.out.println("lastfill: " + lastFill);
@@ -668,8 +675,6 @@ public class TACEvaluator {
 						//break;
 						//System.exit(1);
 					}
-					*/
-					
 					tmp.add(lastFill);
 					recallSums.put(i, tmp);
 				}
@@ -677,23 +682,15 @@ public class TACEvaluator {
 				//System.out.println(c + " => " + recallSums.get(maxLengthOfDoc-1));
 			}
 			//break;
+			
 		}
+		*/
 		
-		//int numDocs = recallSums.get(0).size(); // the # of docs that have ranked against 1 sentence
-		bout.write("# sentences,avg character recall %\n");
-		for (int i=0; i<recallSums.keySet().size(); i++) {
-			double sum = 0;
-			for (double d : recallSums.get(i)) {
-				sum += d;
-			}
-			recall.add(sum / (double)recallSums.get(i).size()); // calculates the average
-			bout.write(i + "," + recall.get(i) + "\n");
-			System.out.println(i + "," + recall.get(i));
-		}
-		bout.close();
-		return recall;
+
+		
 	}
 
+	
 	// for each Citance, returns a ranking of the Reference's sentences
 	// (NOTE: the target/golden answers could technically be
 	// sentence fragments, but this seems rare and would complicate things a lot)
