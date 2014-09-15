@@ -62,6 +62,7 @@ public class TACEvaluator {
 
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
+		/*
 		// just checks citances
 		System.out.println(docs.keySet());
 		int badAnno = 0;
@@ -141,14 +142,13 @@ public class TACEvaluator {
 						badAnno++;
 					}
 				}
-
-				//System.exit(1);
 			}
 		}
 		System.out.println("most off: " + mostOff);
 		System.out.println("good anno: " + goodAnno);
 		System.out.println("bad anno: " + badAnno);
 		System.exit(1);
+		*/
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
 			LDA l = new LDA(malletInputFile, stopwordsFile);
@@ -284,14 +284,9 @@ public class TACEvaluator {
 	}
 
 
-	private static String getMalletLine(String docDir, String topicID, String doc) {
-		// TODO Auto-generated method stub
-		String ret = "";
-		
-		return ret;
-	}
 
 
+	/*
 	private static void printSimilarityStats(Map<Citance, List<IndexPair>> predictions, int numBuckets) throws IOException {
 		
 		BufferedWriter bout = new BufferedWriter(new FileWriter(statsOut));
@@ -446,8 +441,9 @@ public class TACEvaluator {
 		}
 		bout.close();
 	}
-
-
+	*/
+	
+	/*
 	// just for debugging to understand the power of jaccard
 	private static void displayStats(Map<Citance, List<IndexPair>> predictions) throws IOException {
 		int citanceNum=0;
@@ -546,6 +542,7 @@ public class TACEvaluator {
 			}
 		}
 	}
+	*/
 	
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
 	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) throws IOException {
@@ -566,21 +563,51 @@ public class TACEvaluator {
 		System.out.println("most sentences in any reference doc: " + maxLengthOfDoc);
 		for (Citance c : predictions.keySet()) {
 			
-			
 			//System.out.println("citance: " + c.citationText);
 			
 			// only tmp used for printing jaccard stuff
 			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
 			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
+			d.clearBytes();
+			
+			double lastF1 = 0;
+			for (int i=0; i<maxLengthOfDoc; i++) {
+				
+				// look at the Citance's actual returned sentence
+				if (i<predictions.get(c).size()) {
+					IndexPair eachSentenceMarkers = predictions.get(c).get(i);
+					
+					d.fillBytes(eachSentenceMarkers);
+					
+					for (int eachAnno=0; eachAnno<c.annotations.size(); eachAnno++) {
+
+						// skips averaging with Annotator #1
+						if (method.equals("perfect") && eachAnno==0) {
+							continue;
+						}
+						
+					}
+					//lastFill = fillPercentage;
+					double weightedF1 = 
+							
+							TODO:
+								- where does weightedF1 and lastFIll go?
+								- make it calculate F1 based on each perAnno
+				}
+			}
+		}
+			
+			
 			
 			for (int x=0; x<c.annotations.size(); x++) {
 
+				// skips averaging with Annotator #1
 				if (method.equals("perfect") && x==0) {
 					continue;
 				}
 				Annotation a = c.annotations.get(x);
 				
-				double lastFill = 0;
+				double lastF1 = 0;
 				for (int i=0; i<maxLengthOfDoc; i++) {
 					
 					// look at the Citance's actual returned sentence
@@ -606,20 +633,26 @@ public class TACEvaluator {
 						if (refTypes.size() > 0 && citanceTypes.size() > 0 ) {
 							jaccard = (double)intersection / ((double)(citanceTypes.size() + refTypes.size() - intersection));
 						}
-						double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
-						lastFill = fillPercentage;
+						
+						//double fillPercentage = a.fillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
+						//lastFill = fillPercentage;
+						double weightedF1 = a.
+						
+						/*
 						if (i < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
 							double theoreticPercentage = a.theoreticFillInSentence(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos);
 							System.out.println("we have 2 " + i + " " + jaccard + "\t" + theoreticPercentage + ": " + d.originalText.substring(eachSentenceMarkers.startPos, eachSentenceMarkers.endPos));
 						} else {
 							//System.exit(1);
 						}
+						*/
 					}
 					List<Double> tmp = new ArrayList<Double>();
 					if (recallSums.containsKey(i)) {
 						tmp = recallSums.get(i);
 					}
 					
+					/*
 					// this block is just for debugging
 					if (i == maxLengthOfDoc-1 && lastFill < 0.5) {
 						System.out.println("lastfill: " + lastFill);
@@ -635,6 +668,8 @@ public class TACEvaluator {
 						//break;
 						//System.exit(1);
 					}
+					*/
+					
 					tmp.add(lastFill);
 					recallSums.put(i, tmp);
 				}
@@ -739,11 +774,6 @@ public class TACEvaluator {
 
 			for (String w : citanceWords) {
 				if (!malletVocab.contains(w)) {
-					
-					if (w.equals("randomize")) {
-						System.out.println("*** citance " + c + " has randomize");
-					}
-					
 					wordsNotFound.add(w);
 				}
 			}
@@ -762,11 +792,6 @@ public class TACEvaluator {
 				for (String w : curReferenceTypes) {
 					if (!malletVocab.contains(w)) {
 						wordsNotFound.add(w);
-						
-						if (w.equals("randomize")) {
-							System.out.println("*** ref sentence in doc " + d.name + " has randomize");
-						}
-						
 					}
 				}
 				double[] referenceSentDistribution = getSentenceDistribution(curReferenceTypes, wordToTopicProbs, numTopics);
@@ -774,7 +799,7 @@ public class TACEvaluator {
 				double cosineScore = getCosineSim(citanceDistribution, referenceSentDistribution);
 				double klScore = getKL(citanceDistribution, referenceSentDistribution);
 				
-				sentenceScores.put(s, cosineScore);
+				sentenceScores.put(s, 1-klScore);
 			}
 			
 			//System.out.println("citance:" + c.citationText);
@@ -1004,7 +1029,8 @@ public class TACEvaluator {
 				sentenceScores.put(s, rand.nextDouble());
 			}
 			
-			// adds a randomly chosen perfect Annotation
+			// adds annotator #1's perfect Annotation (we always pick #1 because we need to keep track of
+			// which OTHER guys to eval against; so we'll just always say #1 was chosen)
 			Annotation perfect = c.annotations.get(0); //rand.nextInt(c.annotations.size()));
 			for (IndexPair ip : perfect.referenceOffsets) {
 				sentenceMarkers.add(ip); 
@@ -1077,9 +1103,11 @@ public class TACEvaluator {
 				IndexPair i = new IndexPair(s.startPos, s.endPos);
 				sentenceMarkers.add(i);
 				
+				/*
 				if (tmp < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
 					//System.out.println("we have:" + sentenceScores.get(s) + " = " + s.sentence);
 				}
+				*/
 				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
 				tmp++;
 			}

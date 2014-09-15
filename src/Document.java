@@ -23,7 +23,7 @@ import java.nio.file.Path;
 public class Document {
 	String topicID = "";
 	String name = "";
-	//byte[] originalBuffer;
+	byte[] bytesSpanned;
 	String originalText = "";
 	int minNumCharsPerSentence = 40;
 	
@@ -49,6 +49,8 @@ public class Document {
 	    File f = new File(file);
 	    FileInputStream fin = new FileInputStream(f);
 	    originalText = IOUtils.toString(fin, "UTF-8").replaceAll("\r", ""); //FileUtils.readFileToString(f);
+	    bytesSpanned = new byte[originalText.length()];
+	    
 	    fin.close();
 	    
 	    // iterates through the 'originalText' string, trying to determine where sentence markers should be;
@@ -225,6 +227,15 @@ public class Document {
 		return ret.trim();
 	}
 
+	public void fillBytes(IndexPair sentenceMarkers) {
+		for (int i=sentenceMarkers.startPos; i<=sentenceMarkers.endPos; i++) {
+			bytesSpanned[i] = 1;
+		}
+	}
+	
+	public void clearBytes() {
+		bytesSpanned = new byte[originalText.length()];
+	}
 	public String toString() {
 		return this.name + " (" + this.topicID + ") has " + this.sentences.size() + " sentences";
 	}

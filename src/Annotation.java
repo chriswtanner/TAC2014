@@ -1,11 +1,14 @@
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // represents an Annotator's annotation for 1 particular Citance
 public class Annotation {
 	List<IndexPair> referenceOffsets = new ArrayList<IndexPair>();
-	List<Boolean[]> answerGrids = new ArrayList<Boolean[]>();
-	int filledPos = 0;
+	//List<Boolean[]> answerGrids = new ArrayList<Boolean[]>();
+	//int filledPos = 0;
+	Set<Integer> goldenBytes = new HashSet<Integer>();
 	int totalPos = 0;
 	String referenceText = "";
 	String discourse = "";
@@ -17,17 +20,23 @@ public class Annotation {
 			String[] tokens = o.split("-");
 			referenceOffsets.add(new IndexPair(Integer.parseInt(tokens[0]), Integer.parseInt(tokens[1])));
 			
+			// we add to the HashSet just to handle the rare case that the truth file has overlapping/repeated bytes marked as golden
+			for (int i=Integer.parseInt(tokens[0]); i<=Integer.parseInt(tokens[1]); i++) {
+				goldenBytes.add(i);
+			}
 			// i.e., 100 - 101 indices should span 2 cells; 2 = 1 + 101 - 100
-			answerGrids.add(new Boolean[1 + Integer.parseInt(tokens[1]) - Integer.parseInt(tokens[0])]);
-			totalPos += (1 + Integer.parseInt(tokens[1]) - Integer.parseInt(tokens[0]));
+			//answerGrids.add(new Boolean[1 + Integer.parseInt(tokens[1]) - Integer.parseInt(tokens[0])]);
+			//totalPos += (1 + Integer.parseInt(tokens[1]) - Integer.parseInt(tokens[0]));
 		}
 		//System.out.println("totalPos:" + totalPos + "; offsets:" + referenceOffsets);
 		
 		this.referenceText = text;
 		this.discourse = dis;
 		this.annotator = anno;
+		this.totalPos = goldenBytes.size();
 	}
 	
+	/*
 	// accepts a given sentence's start and end markers and records into answerGrids which characters we span
 	public double fillInSentence(int start, int end) {
 		
@@ -70,7 +79,7 @@ public class Annotation {
 		}
 		return best;
 	}
-	
+	*/
 	public String toString() {
 		return "anno:" + referenceOffsets + ";" + referenceText + ";" + discourse + ";" + annotator;
 	}

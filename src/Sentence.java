@@ -25,7 +25,6 @@ public class Sentence {
 			types.add(token);
 			tokens.add(token);
 		}
-		
 	}
 	
 	public String toString() {
