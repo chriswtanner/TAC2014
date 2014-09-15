@@ -28,7 +28,7 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
-	static String method = "lda"; //lda";
+	static String method = "jaccard"; //lda";
 	static Integer minNumDocs = 2;
 	static Double maxPercentDocs = .8;
 	
@@ -62,6 +62,93 @@ public class TACEvaluator {
 
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
+		// just checks citances
+		System.out.println(docs.keySet());
+		int badAnno = 0;
+		int goodAnno = 0;
+		int mostOff = 0;
+		for (Citance c : citances) {
+
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			if (1==1 || d.name.equals("Blasco.txt")) {
+				//System.out.println("citance: " + c);
+				//System.out.println("in doc:" + d.name);
+				
+				for (Annotation a : c.annotations) {
+					boolean perfect = true;
+					List<String> golden = new ArrayList<String>();
+					String ansText = a.referenceText;
+					//System.out.println("ansText:" + ansText + "END");
+					List<String> refList = new ArrayList<String>();
+					while (ansText.indexOf("...") != -1) {
+						int pos = ansText.indexOf("... ");
+						String beg = ansText.substring(0,pos-1);
+						refList.add(beg);
+						//System.out.println("beg:" + beg + "END");
+						ansText = ansText.substring(pos + 4);
+						//golden.add(ansText);
+					}
+					
+					refList.add(ansText.trim());
+					//golden.add(ansText);
+					for (String r : refList) {
+						//System.out.println("gold (" + r.length() + "):" + r);
+						golden.add(r);
+					}
+					
+					//System.out.println("gold: " + ansText);
+					for (IndexPair i : a.referenceOffsets) {
+						String refText = d.originalText.substring(i.startPos, i.endPos-1);
+						System.out.println(i.startPos + "-" + i.endPos);
+						//System.out.println("\tref:" + refText);
+						//String s = new String(d.originalBuffer, "UTF-8");
+						//System.out.println("\tbuf-to-str:" + s.substring(i.startPos,i.endPos));
+						//System.out.println("\tstr:" + d.originalText.substring(i.startPos,i.endPos));
+						String myRefGuess = d.originalText.substring(i.startPos,i.endPos);
+						boolean contains = false;
+						String closest = "";
+						for (String gold : golden) {
+							if (gold.equals(myRefGuess)) {
+								contains = true;
+							}
+							if (Math.abs(gold.length() - myRefGuess.length()) < Math.abs(myRefGuess.length() - closest.length())) {
+								closest = gold;
+							}
+						}
+						if (!contains) {
+							perfect = false;
+							int numOff = 0;
+							//System.out.println("NOT CONTAINED (" + myRefGuess.length() + "):" + myRefGuess);
+							//System.out.println("closest:" + closest);
+							for (int x=0; x<Math.min(myRefGuess.length(), closest.length()); x++) {
+								if (myRefGuess.charAt(x) != closest.charAt(x)) {
+									numOff++;
+									//System.out.println("we disagree on char " + x + ": "  + myRefGuess.charAt(x) + " vs " + closest.charAt(x));
+									//break;
+								}
+							}
+							//System.out.println("numOff: " + numOff);
+							if (numOff > mostOff) {
+								mostOff = numOff;
+							}
+						} else {
+							//System.out.println("CONTAINED:" + myRefGuess);
+						}
+					}
+					if (perfect) {
+						goodAnno++;
+					} else {
+						badAnno++;
+					}
+				}
+
+				//System.exit(1);
+			}
+		}
+		System.out.println("most off: " + mostOff);
+		System.out.println("good anno: " + goodAnno);
+		System.out.println("bad anno: " + badAnno);
+		System.exit(1);
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
 			LDA l = new LDA(malletInputFile, stopwordsFile);
@@ -137,7 +224,7 @@ public class TACEvaluator {
 						Document d = new Document(docDir, topicID, doc);
 						docs.put(topicID + "_" + doc, d);
 					}
-					System.out.println("CITING ARTICLE!: " + doc);
+					//System.out.println("CITING ARTICLE!: " + doc);
 				}
 			}
 		}
@@ -181,6 +268,9 @@ public class TACEvaluator {
 			Document d = docs.get(doc);
 			bout.write(d.topicID + "_" + d.name + " " + d.topicID + "_" + d.name);
 			for (Sentence s : d.sentences) {
+				if (d.name.equals("Blasco.txt")) {
+					System.out.println("blasco sent: " + s.sentence);
+				}
 				List<String> curReferenceTokens = removeStopwordsAndBadWords(s.tokens);
 				for (String w : curReferenceTokens) {
 					if (!badWords.contains(w)) {

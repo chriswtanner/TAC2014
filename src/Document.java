@@ -8,15 +8,25 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Scanner;
 import java.util.StringTokenizer;
 
+import org.apache.commons.*;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 
+/*
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.Path;
+*/
 public class Document {
 	String topicID = "";
 	String name = "";
+	//byte[] originalBuffer;
 	String originalText = "";
-	
 	int minNumCharsPerSentence = 40;
+	
 	
 	// represents the start and end character positions of all sentence, relative to 'originalText'
 	// e.g., originalText will start with header info, 
@@ -35,14 +45,12 @@ public class Document {
 		String file = docDir + "data/" + topicID + "/Documents_Text/" + sourceName;
 
 		System.out.println("creating doc: " + file);
+
 	    File f = new File(file);
 	    FileInputStream fin = new FileInputStream(f);
-	    byte[] buffer = new byte[(int) f.length()];
-	    new DataInputStream(fin).readFully(buffer);
+	    originalText = IOUtils.toString(fin, "UTF-8").replaceAll("\r", ""); //FileUtils.readFileToString(f);
 	    fin.close();
-	    this.originalText = new String(buffer, "UTF-8");
 	    
-
 	    // iterates through the 'originalText' string, trying to determine where sentence markers should be;
 	    // we'll ignore the headers, each newline represents the end of a new sentence, start of a new one,
 	    // and if we see endPunctuation (.!?;) followed by a space, we'll require that we've seen at least 40 chars to make a sentence
@@ -50,11 +58,13 @@ public class Document {
     	int startIndex = 0;
     	int bracketCount = 0;
 	    for (int i=0; i<originalText.length(); i++) {
+	    	/*
 	    	if (sourceName.equals("Kumar.txt")) {
 	    		if (i%10 == 0) {
 	    			System.out.println("char " + i);
 	    		}
 	    	}
+	    	*/
 	    	char c = originalText.charAt(i);
 	    	
 	    	if (c == '(') {
@@ -66,18 +76,21 @@ public class Document {
 	    	// checks if we just started a new line
 	    	if (i>0 && originalText.charAt(i-1) == '\n') {
 	    		
+	    		
 	    		String curWord = originalText.substring(startIndex, i).trim();
 	    		boolean reachedEnd = false;
 	    		for (String es : endSections) {
 	    			if (curWord.equals(es)) {
-	    				System.out.println("found:" + es);
+	    				//System.out.println("found:" + es);
 	    				reachedEnd = true;
 	    			}
 	    		}
 	    		if (reachedEnd) {
+	    			/*
 	    			if (sourceName.equals("Kumar.txt")) {
 	    				System.out.println("found end section:" + curWord);
 	    			}
+	    			*/
 	    			break;
 	    		}
 	    		startIndex = i;
@@ -107,9 +120,11 @@ public class Document {
 	    	for (int j=startIndex; j<i; j++) {
 	    		if (originalText.charAt(j) != ' ') {
 	    			startIndex = j;
+	    			/*
 	    			if (sourceName.equals("Kumar.txt")) {
 	    				System.out.println("breaking!");
 	    			}
+	    			*/
 	    			break;
 	    		}
 	    	}
@@ -117,9 +132,11 @@ public class Document {
 	    		
 	    		if (c != '\n') {
 	    			i++;
+	    			/*
 	    			if (sourceName.equals("Kumar.txt")) {
 	    				System.out.println("found a newline, so we are skipping over it?");
 	    			}
+	    			*/
 	    		}
 	    		
 	    		String filteredText = filterText(originalText.substring(startIndex, i));
@@ -128,45 +145,61 @@ public class Document {
 	    		startIndex = i+1;
 	    		bracketCount = 0;
 	    		
+	    		/*
 	    	    if (sourceName.equals("Kumar.txt")) {
 	    	    	System.out.println("added sentence: " + s);
 	    	    	System.out.println("startindex: " + startIndex);
-	    	    	
 	    	    }
+	    	    */
 	    	} else if (c == '\n' && !foundIntro) {
     			boolean isIntroSection = false;
     			
     			String curLine = originalText.substring(startIndex, i).trim();
+    			
+    			/*
     			if (sourceName.equals("Kumar.txt")) {
 			    	System.out.println("Checking if sentence is an intro:" + curLine);
 			    }
+			    */
     			for (String intro : introSections) {
     				
     				if (curLine.equals(intro)) {
 	    				isIntroSection = true;
-	    				System.out.println("we found:" + intro);
+	    				//System.out.println("we found:" + intro);
 	    			}
     			}
     			if (isIntroSection) {
     				foundIntro = true;
     				sentences.clear();
 
+    				/*
     			    if (sourceName.equals("Kumar.txt")) {
     			    	System.out.println("CLEARING ALL SENTENCES!!!");
     			    	System.out.println("i was " + i + " but now" + originalText.indexOf("\n", i));
     			    }
-    				i = originalText.indexOf("\n", i);
+    			    */
+    				int beg = i;
+    				while (i < originalText.length()) {
+    					if ((char)originalText.charAt(i) == '\n') {
+    						break;
+    					}
+    					i++;
+    				}
+					//System.out.println("i was " + beg + " but now" + i);
+    				//i = originalText.indexOf("\n", i);
     			}
 	    	}
 	    }
+	    /*
 	    System.out.println("# sentences: " + sentences.size());
 	    if (sourceName.equals("Kumar.txt")) {
 	    	System.out.println("original text: "  + originalText);
 	    	System.out.println("last sentence: " + sentences.get(sentences.size()-1));
 	    	//System.exit(1);
 	    }
+	    */
 	}
-	
+
 	public String filterText(String text) {
 		String textPhase1 = "";
 		int parenCount = 0;
