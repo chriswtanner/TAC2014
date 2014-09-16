@@ -34,7 +34,7 @@ public class LDA {
 	int numIterations = 2000; // 3,000
 	//double totalFlutter = 0.05;
     double padding = 0.00001;
-	int numTopics = 25; // 50
+	int numTopics = 50; // 50
 	String malletInput = "";
 	String malletStopwords = "";
 	

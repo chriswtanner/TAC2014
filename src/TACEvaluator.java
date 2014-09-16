@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.TreeSet;
 
 import cc.mallet.util.CommandOption.File;
 
@@ -27,8 +28,8 @@ public class TACEvaluator {
 	// NOTE: simply change this value
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
-	static boolean runLDA = true;
-	static String method = "lda"; //lda";
+	static boolean runLDA = false;
+	static String method = "perfect"; //lda";
 	static Integer minNumDocs = 2;
 	static Double maxPercentDocs = .8;
 	
@@ -579,18 +580,47 @@ public class TACEvaluator {
 					
 					d.fillBytes(eachSentenceMarkers);
 					
-					for (int eachAnno=0; eachAnno<c.annotations.size(); eachAnno++) {
+					// debugging; prints the last sentence's fill %
+					/*
+					if (i==predictions.get(c).size()-1) {
+						System.out.println("last sentence; " + d.bytesSpanned.size() + " out of " + d.originalText.length() + " = " + (double)d.bytesSpanned.size() / (double)d.originalText.length());
+						Set<Integer> goldenBytes = new HashSet<Integer>();
+						TreeSet<Integer> missingBytes = new TreeSet<Integer>();
+						for (int eachAnno=0; eachAnno<c.annotations.size(); eachAnno++) {
 
-						// skips averaging with Annotator #1
-						if (method.equals("perfect") && eachAnno==0) {
-							continue;
+							for (IndexPair ip : c.annotations.get(eachAnno).referenceOffsets) {
+								for (int bI=ip.startPos; bI<=ip.endPos; bI++) {
+									goldenBytes.add(bI);
+								}
+							}
+							// skips averaging with Annotator #1
+							
+							if (method.equals("perfect") && eachAnno==0) {
+								continue;
+							}
+							
 						}
-						
+						for (Integer goldenByte : goldenBytes) {
+							if (!d.bytesSpanned.contains(goldenByte)) { 
+								missingBytes.add(goldenByte);
+							}
+						}
+						System.out.println("\tannotators marked up total of " + goldenBytes.size() + " bytes; we missed " + missingBytes.size() + " = " + (double)missingBytes.size() / (double)goldenBytes.size());
+						System.out.println("\tmissing: " + missingBytes);
+						System.out.println("\tfrom doc: " + d.name);
+						for (Integer missed : missingBytes) {
+							System.out.println("\t" + missed + ":" + d.originalText.charAt(missed));
+						}
+					}	
+					*/
+					List<Annotation> annos = new ArrayList<Annotation>(c.annotations);
+					if (method.equals("perfect")) {
+						annos.remove(0);
 					}
-					//lastFill = fillPercentage;
-					double weightedF1 = d.calculateWeightedF1(c.annotations);
+					double weightedF1 = d.calculateWeightedF1(annos);
 					lastF1 = weightedF1;
 				}
+				
 				
 				List<Double> tmp = new ArrayList<Double>();
 				if (f1Sums.containsKey(i)) {
@@ -1028,9 +1058,9 @@ public class TACEvaluator {
 			
 			// adds annotator #1's perfect Annotation (we always pick #1 because we need to keep track of
 			// which OTHER guys to eval against; so we'll just always say #1 was chosen)
-			Annotation perfect = c.annotations.get(0); //rand.nextInt(c.annotations.size()));
+			Annotation perfect = c.annotations.get(0);
 			for (IndexPair ip : perfect.referenceOffsets) {
-				sentenceMarkers.add(ip); 
+				//sentenceMarkers.add(ip);  TODO: DONT LEAVE THIS COMMENTED OUT; it forces all choices to be random!
 			}
 			
 			System.out.println("citance:" + c.citationText);

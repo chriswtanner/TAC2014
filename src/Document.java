@@ -26,7 +26,6 @@ public class Document {
 	String topicID = "";
 	String name = "";
 	Set<Integer> bytesSpanned = new HashSet<Integer>();
-	//byte[] bytesSpanned;
 	String originalText = "";
 	int minNumCharsPerSentence = 40;
 	
@@ -134,27 +133,26 @@ public class Document {
 	    	}
 	    	if (/*foundIntro && */(i - startIndex) >= minNumCharsPerSentence && (c == '\n' || isEndPunct) && bracketCount == 0) {
 	    		
-	    		if (c != '\n') {
+	    		i++;
+	    		/*
+	    		while (i < originalText.length() && originalText.charAt(i) == '\n') {
 	    			i++;
-	    			/*
-	    			if (sourceName.equals("Kumar.txt")) {
-	    				System.out.println("found a newline, so we are skipping over it?");
-	    			}
-	    			*/
 	    		}
-	    		
+				*/
 	    		String filteredText = filterText(originalText.substring(startIndex, i));
-	    		Sentence s = new Sentence(startIndex, i-1, filteredText);
+	    		Sentence s = new Sentence(startIndex, i, filteredText); // was i-1
 	    		sentences.add(s);
+	    		
+				if (sourceName.equals("Kumar.txt")) {
+					System.out.println("added sentence: " + s
+							+ "END; original:"
+							+ originalText.substring(startIndex, i));
+					System.out.println("startindex: " + startIndex);
+				}
+	    		
 	    		startIndex = i+1;
 	    		bracketCount = 0;
-	    		
-	    		/*
-	    	    if (sourceName.equals("Kumar.txt")) {
-	    	    	System.out.println("added sentence: " + s);
-	    	    	System.out.println("startindex: " + startIndex);
-	    	    }
-	    	    */
+	    	    
 	    	} else if (c == '\n' && !foundIntro) {
     			boolean isIntroSection = false;
     			
@@ -212,7 +210,7 @@ public class Document {
 			if (text.charAt(i) == '(') {
 				parenCount++;
 			} else if (text.charAt(i) == ')') {
-				parenCount--;
+				parenCount = Math.max(0, parenCount-1);
 			} else if (text.charAt(i) == '[') {
 				bracketCount++;
 			} else if (text.charAt(i) == ']') {
