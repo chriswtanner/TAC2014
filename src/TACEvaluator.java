@@ -31,7 +31,7 @@ public class TACEvaluator {
 	static boolean runLDA = false;
 	
 	// lda, jaccard, jaccardWeighted, jaccardCitanceWeighted, jaccardLength, perfect, longest
-	static String method = "jaccardLength"; //lda"; 
+	static String method = "jaccardCitanceWeighted"; //lda"; 
 	
 	// 0 = vanilla; non-stopwords = 1 (stopwords = 0 because mallet-tac doens't include them, plus jaccard ignores them anyway)
 	// 1 = corpus-wide max_z [p(w|z)]
@@ -58,7 +58,7 @@ public class TACEvaluator {
 	static Map<String, Document> globalDocs = new HashMap<String, Document>(); // stores both the reference and citance docs
 	
 	// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
-	static String ldaObject = dataDir + "lda_25z_2000i.ser";
+	static String ldaObject = dataDir + "lda_50z_2000i.ser";
 	
 	static Set<String> badWords = new HashSet<String>();
 	static Map<String, Double> wordWeights = new HashMap<String, Double>();
@@ -248,6 +248,7 @@ public class TACEvaluator {
 				wordWeights.put(w, maxTopicProb);
 			}
 		} else if (wordWeightingScheme == 2) {
+			double max = 0;
 			for (String w : malletVocab) {
 				double maxTopicProb = 0;
 				for (int z = 0; z < numTopics; z++) {
@@ -257,7 +258,15 @@ public class TACEvaluator {
 						}
 					}
 				}
+				if (maxTopicProb > max) {
+					max = maxTopicProb;
+				}
 				wordWeights.put(w, maxTopicProb);
+			}
+			
+			// normalizes so the most important word = 1
+			for (String w : malletVocab) {
+				wordWeights.put(w, wordWeights.get(w)/max);
 			}
 		}
 		return wordWeights;
@@ -1201,7 +1210,7 @@ public class TACEvaluator {
 				}
 				// ensures both the citance and reference sentences aren't just stopwords
 				if (curReferenceTypes.size() > 0 && citanceTypes.size() > 0 ) {
-					score = curReferenceTokens.size(); //(double)intersection / ((double)(citanceTypes.size() + curReferenceTypes.size() - intersection));
+					score = (double)intersection / ((double)(citanceTypes.size() + curReferenceTypes.size() - intersection));
 				}
 				
 				sentenceScores.put(s, score);
@@ -1391,32 +1400,36 @@ public class TACEvaluator {
 			// gets the word weights for the citance's document
 			Map<String, Double> wordWeights = new HashMap<String, Double>();
 			double sum = 0;
+			double max = 0;
 			for (String w : citanceWords) {
 				
 				// marginalizes over all topics
 				// P(w|d) = sum_z [p(w|z)p(z|d)]
-				double currentWordProb = 0;
+				double currentWordProb = 0.00001;
 				for (int z=0; z<numTopics; z++) {
 					if (tmo.topicToWordProbabilities.get(z).containsKey(w)) {
 						currentWordProb += tmo.topicToWordProbabilities.get(z).get(w)*tmo.docToTopicProbabilities.get(c.topicID + "_" + c.citingDoc)[z];
 					}
+				}
+				if (currentWordProb > max) {
+					max = currentWordProb;
 				}
 				sum += currentWordProb;
 				wordWeights.put(w,currentWordProb);
 			}
 			// normalizes over all wordProbs
 			for (String w : citanceWords) {
-				wordWeights.put(w, wordWeights.get(w)/sum);
+				wordWeights.put(w, wordWeights.get(w)/max); ///sum);
 			}
 			
-			/*
+			
 			Iterator it2 = sortByValueDescending(wordWeights).keySet().iterator();
 			while (it2.hasNext()) {
 				String w = (String)it2.next();
 				System.out.println("word " + w + " has weight: " + wordWeights.get(w));
 			}
-			System.exit(1);
-			*/
+			//System.exit(1);
+			
 			for (Sentence s : d.sentences) {
 				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
 				List<String> curReferenceTokens = removeStopwordsAndBadWords(s.tokens);
@@ -1428,13 +1441,18 @@ public class TACEvaluator {
 					if (citanceTypes.contains(token) && wordWeights.containsKey(token)) {
 						intersection += (wordWeights.get(token));
 						//System.out.println("\tshared: " + token + " = " + wordWeights.get(token));
+					} else if (citanceTypes.contains(token) && !wordWeights.containsKey(token)) {
+						System.err.println("we dont have word weight for "+ token);
 					}
 				}
 				
 				Set<String> union = new HashSet<String>(citanceTypes);
 				union.addAll(curReferenceTypes);
-				double denom = 0.000001;
+				double denom = 0; //.000001;
 				for (String w : union) {
+					if (curReferenceTypes.contains(w) && citanceTypes.contains(w)) {
+						continue;
+					}
 					if (wordWeights.containsKey(w)) {
 						denom += wordWeights.get(w);
 					}
@@ -1511,7 +1529,7 @@ public class TACEvaluator {
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
 						if (wordWeights.containsKey(token)) {
-							intersection += 1; //(wordWeights.get(token));
+							intersection += (wordWeights.get(token));
 							//System.out.println(token + " adds " + wordWeights.get(token));
 						}
 					}
@@ -1519,17 +1537,20 @@ public class TACEvaluator {
 				
 				Set<String> union = new HashSet<String>(citanceTypes);
 				union.addAll(curReferenceTypes);
-				double denom = 0.000001;
+				double denom = 0; //0.000001;
 				for (String w : union) {
+					if (curReferenceTypes.contains(w) && citanceTypes.contains(w)) {
+						continue;
+					}
 					if (wordWeights.containsKey(w)) {
-						denom += wordWeights.get(w);
+						denom += 1; //wordWeights.get(w);
 					}
 				}
 				//System.out.println("union: " + union + " = " + denom);
 				
 				// ensures both the citance and reference sentences aren't just stopwords
 				if (curReferenceTypes.size() > 0 && citanceTypes.size() > 0 ) {
-					score = (double)intersection / (double)denom;
+					score = (double)intersection; // / (double)denom;
 				}
 				sentenceScores.put(s, score);
 			}
@@ -1696,7 +1717,7 @@ public class TACEvaluator {
 			}
 
 			Annotation a = new Annotation(refOffsets, refText, discourse, annotator);
-			System.out.println(a);
+			//System.out.println(a);
 			c.addAnnotation(a);
 			//if (!uidToCitance.containsKey(uid)) {
 			uidToCitance.put(uid, c);

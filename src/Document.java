@@ -143,13 +143,14 @@ public class Document {
 	    		Sentence s = new Sentence(startIndex, i, filteredText); // was i-1
 	    		sentences.add(s);
 	    		
+	    		/*
 				if (sourceName.equals("Kumar.txt")) {
 					System.out.println("added sentence: " + s
 							+ "END; original:"
 							+ originalText.substring(startIndex, i));
 					System.out.println("startindex: " + startIndex);
 				}
-	    		
+	    		*/
 	    		startIndex = i+1;
 	    		bracketCount = 0;
 	    	    
