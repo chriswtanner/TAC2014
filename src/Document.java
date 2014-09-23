@@ -33,6 +33,7 @@ public class Document {
 	// e.g., originalText will start with header info, 
 	// but if we have (142,181) that means chars 142 - 181 within originalText represents a valid sentence we care about
 	List<Sentence> sentences = new ArrayList<Sentence>();
+	List<Integer> sectionMarkers = new ArrayList<Integer>(); // represents how many sentences we've seen so far, which precede the current section we just saw
 	
 	List<String> introSections = new ArrayList<String>(Arrays.asList("Introduction", "Summary", "Main Text", "Abstract"));
 	List<String> endPunctuations = new ArrayList<String>(Arrays.asList(".", ";", "!", "?"));
@@ -81,6 +82,13 @@ public class Document {
 	    		
 	    		
 	    		String curWord = originalText.substring(startIndex, i).trim();
+	    		
+	    		// we found a new section
+	    		if (curWord.length() < 80) {
+	    			sectionMarkers.add(sentences.size());
+	    		}
+	    		
+	    		//System.out.println("curWord:" + curWord);
 	    		boolean reachedEnd = false;
 	    		for (String es : endSections) {
 	    			if (curWord.equals(es)) {
@@ -174,7 +182,7 @@ public class Document {
     			if (isIntroSection) {
     				foundIntro = true;
     				sentences.clear();
-
+    				sectionMarkers.clear();
     				/*
     			    if (sourceName.equals("Kumar.txt")) {
     			    	System.out.println("CLEARING ALL SENTENCES!!!");
@@ -201,6 +209,7 @@ public class Document {
 	    	//System.exit(1);
 	    }
 	    */
+	    //System.exit(1);
 	}
 
 	public String filterText(String text) {

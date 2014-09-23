@@ -27,6 +27,28 @@ public class Sentence {
 		}
 	}
 	
+	// returns the maximum precision that the given sentence has with any of the anno's reference/golden answers
+	// this is used because our delimitation of Sentences probably doesn't correspond perfectly w/ the golden answers,
+	// so we need to know how close/good each of our Sentences is, which will be used for displaying goodness vs Sentence location within a doc 
+	public double getPrecision(List<Annotation> annos) {
+
+		int maxBytesShared = 0;
+		for (Annotation a : annos) {
+			
+			int numBytesShared = 0;
+			
+			for (int i=startPos; i<=endPos; i++) {
+				if (a.goldenBytes.contains(i)) {
+					numBytesShared++;
+				}
+			}
+			if (numBytesShared > maxBytesShared) {
+				maxBytesShared = numBytesShared;
+			}
+		}
+		return (double)maxBytesShared / (double)(endPos - startPos + 1);
+	}
+	
 	public String toString() {
 		return "(" + startPos + "," + endPos + "): " + sentence;
 	}

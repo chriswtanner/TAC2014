@@ -30,8 +30,8 @@ public class TACEvaluator {
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
 	
-	// lda, jaccard, jaccardWeighted, jaccardCitanceWeighted, jaccardLength, perfect, longest
-	static String method = "jaccardCitanceWeighted"; //lda"; 
+	// lda, jaccard, jaccardWeighted, jaccardCitanceWeighted, jaccardLength, raw, perfect, longest
+	static String method = "jaccardWeighted"; //lda"; 
 	
 	// 0 = vanilla; non-stopwords = 1 (stopwords = 0 because mallet-tac doens't include them, plus jaccard ignores them anyway)
 	// 1 = corpus-wide max_z [p(w|z)]
@@ -187,6 +187,8 @@ public class TACEvaluator {
 			predictions = getJaccardCitanceWeightedPredictions(referenceDocs, citances, ldaObject);
 		} else if (method.equals("jaccardLength")) {
 			predictions = getJaccardAndLengthPredictions(referenceDocs, citances, jaccardWeight);
+		} else if (method.equals("raw")) {
+			predictions = getRawPredictions(referenceDocs, citances);
 		} else if (method.equals("longest")) {
 			predictions = getLongestStringPredictions(referenceDocs, citances);
 		} else if (method.equals("perfect")) {
@@ -196,6 +198,7 @@ public class TACEvaluator {
 		List<Double> recall = scorePredictions(predictions);
 		//displayStats(predictions);
 		//printSimilarityStats(predictions, 50);
+		//printSentenceImportance(citances); // prints the sentencePlacement graphs to results.csv
 	}
 
 
@@ -536,6 +539,57 @@ public class TACEvaluator {
 		bout.close();
 	}
 	*/
+	
+	
+	// prints how important each Sentence is wrt its placement within its Doc
+	private static void printSentenceImportance(Set<Citance> citances) throws IOException {
+		double[] ret = new double[700];
+		double[] sectionLengths = new double[100];
+		int retSum = 0;
+		int sSum = 0;
+		for (Citance c : citances) {
+			// only tmp used for printing jaccard stuff
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
+			Document d = referenceDocs.get(c.topicID + ":" + c.referenceDoc);
+			
+			//System.out.println("\ncitance:" + c.citationText);
+			//System.out.println("\nperfect annotations:");
+			
+			int lastMarker = 0;
+			for (int i=0; i<d.sectionMarkers.size(); i++) {
+				int curMarker = d.sectionMarkers.get(i);
+				if (curMarker != lastMarker) {
+					sectionLengths[(curMarker - lastMarker)]++;
+					sSum++;
+				}
+				lastMarker = curMarker;
+			}
+			
+			for (int i=0; i<d.sentences.size(); i++) {
+				double prec = d.sentences.get(i).getPrecision(c.annotations);
+				
+				// finds the # of sentences this is within the current section
+				int lastParagraph = 0;
+				for (int j=0; j<d.sectionMarkers.size(); j++) {
+					lastParagraph = d.sectionMarkers.get(j);
+					if (lastParagraph >= i) {
+						break;
+					}
+				}
+				int sentNum = lastParagraph - i;
+				ret[sentNum] += prec;
+				retSum += prec;
+				//System.out.println(i + " = " + prec);
+			}
+			//System.exit(1);
+		}
+		BufferedWriter bout = new BufferedWriter(new FileWriter(resultsOut));
+		bout.write("sentence#,%paragraphsOfThisLength,%goldenSentencesAtThisPosition\n");
+		for (int i=0; i<100; i++) {
+			bout.write(i + "," + (double)sectionLengths[i]/(double)sSum + "," + (double)ret[i]/retSum + "\n");
+		}
+		bout.close();
+	}
 	
 	/*
 	// just for debugging to understand the power of jaccard
@@ -1401,7 +1455,7 @@ public class TACEvaluator {
 			Map<String, Double> wordWeights = new HashMap<String, Double>();
 			double sum = 0;
 			double max = 0;
-			for (String w : citanceWords) {
+			for (String w : citanceTypes) { //citanceWords) {
 				
 				// marginalizes over all topics
 				// P(w|d) = sum_z [p(w|z)p(z|d)]
@@ -1418,10 +1472,9 @@ public class TACEvaluator {
 				wordWeights.put(w,currentWordProb);
 			}
 			// normalizes over all wordProbs
-			for (String w : citanceWords) {
+			for (String w : citanceTypes) {
 				wordWeights.put(w, wordWeights.get(w)/max); ///sum);
 			}
-			
 			
 			Iterator it2 = sortByValueDescending(wordWeights).keySet().iterator();
 			while (it2.hasNext()) {
@@ -1429,7 +1482,7 @@ public class TACEvaluator {
 				System.out.println("word " + w + " has weight: " + wordWeights.get(w));
 			}
 			//System.exit(1);
-			
+			int sentNum = 1;
 			for (Sentence s : d.sentences) {
 				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
 				List<String> curReferenceTokens = removeStopwordsAndBadWords(s.tokens);
@@ -1463,7 +1516,13 @@ public class TACEvaluator {
 					score = (double)intersection; // / (double)denom;
 				}
 				//System.out.println("inter: " + intersection + "; denom: " + denom);
-				sentenceScores.put(s, score);
+				if (sentNum > 20 && sentNum < 50) {
+					sentenceScores.put(s, 1.0);
+				} else {
+					sentenceScores.put(s, 1.0 / (double)sentNum);//score); TODO DONT LEAVE THIS!
+				
+				}
+				sentNum++;
 			}
 
 			//System.out.println("citance:" + c.citationText);
@@ -1529,7 +1588,7 @@ public class TACEvaluator {
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
 						if (wordWeights.containsKey(token)) {
-							intersection += (wordWeights.get(token));
+							intersection += 1; //(wordWeights.get(token));
 							//System.out.println(token + " adds " + wordWeights.get(token));
 						}
 					}
@@ -1576,6 +1635,125 @@ public class TACEvaluator {
 			if (sentenceMarkers.size() == 0) {
 				System.out.println("we have 0 sentence markers for citance " + c);
 			}
+		}
+		return ret;
+	}
+	
+	// works w/ the raw sentence (stopwords and 'bad' words included)
+	// we will try jaccard sliding window and BLEU attempts here
+	private static Map<Citance, List<IndexPair>> getRawPredictions(Map<String, Document> docs, Set<Citance> citances) {
+		
+		// displays wordWeights
+		Iterator it2 = sortByValueDescending(wordWeights).keySet().iterator();
+		int numWords = 0;
+		while (it2.hasNext() && numWords < 200) {
+			String w = (String)it2.next();
+			System.out.println(w + " = " + wordWeights.get(w));
+			numWords++;
+		}
+		
+		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
+		
+		for (Citance c : citances) {
+			
+			Map<Sentence, Double> sentenceScores = new HashMap<Sentence, Double>();
+			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
+			
+			// the non-stoplist types from the Citance
+			List<String> citanceTokens = c.getTextTokensAsList();
+			
+			System.out.println("CITANCE: " + citanceTokens);
+			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
+
+			// looks within the relevant reference doc (aka source doc)
+			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			System.out.println("reference doc: " + d.name);
+			if (d.sentences.size() == 0) {
+				System.err.println(d + " has 0 sentences");
+				System.exit(1);
+			}
+			double bestSentScore = 0;
+			Sentence bestSent = null;
+			for (Sentence s : d.sentences) {
+				List<String> curReferenceTokens = s.tokens;
+				
+				//System.out.println("REFERENCE:" + curReferenceTokens);
+				double score = 0;
+				int intersection = 0;
+				
+				int windowSize = 80;
+				int bestScore = 0;
+				// sliding window of size 7
+				for (int startI=0; startI<=curReferenceTokens.size()-windowSize; startI++) {
+					
+					int currentWindowScore = 0;
+					for (int index=startI; index<windowSize; index++) {
+						if (citanceTokens.contains(curReferenceTokens.get(index))) {
+							currentWindowScore++;
+						}
+					}
+					if (currentWindowScore > bestScore) {
+						bestScore = currentWindowScore;
+					}
+				}
+				
+				for (String token : curReferenceTokens) {
+					if (citanceTokens.contains(token)) {
+						if (wordWeights.containsKey(token)) {
+							intersection += (wordWeights.get(token));
+							//System.out.println(token + " adds " + wordWeights.get(token));
+						}
+					}
+				}
+				
+				Set<String> union = new HashSet<String>(citanceTokens);
+				union.addAll(curReferenceTokens);
+				double denom = 0; //0.000001;
+				for (String w : union) {
+					if (curReferenceTokens.contains(w) && citanceTokens.contains(w)) {
+						continue;
+					}
+					if (wordWeights.containsKey(w)) {
+						denom += 1; //wordWeights.get(w);
+					}
+				}
+				//System.out.println("union: " + union + " = " + denom);
+				
+				// ensures both the citance and reference sentences aren't just stopwords
+				if (curReferenceTokens.size() > 0 && citanceTokens.size() > 0 ) {
+					score = (double)intersection; // / (double)denom;
+				}
+				sentenceScores.put(s, (double)bestScore);
+				
+				if (bestScore > bestSentScore) {
+					bestSentScore = bestScore;
+					bestSent = s;
+				}
+			}
+			System.out.println("best sent (" + bestSentScore + "): " + bestSent);
+			//System.exit(1);
+			//System.out.println("citance:" + c.citationText);
+			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
+			int tmp=0;
+
+			while (it.hasNext()) {
+				Sentence s = (Sentence)it.next();
+				IndexPair i = new IndexPair(s.startPos, s.endPos);
+				sentenceMarkers.add(i);
+				
+				/*
+				if (tmp < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
+					//System.out.println("we have:" + sentenceScores.get(s) + " = " + s.sentence);
+				}
+				*/
+				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
+				tmp++;
+			}
+			ret.put(c, sentenceMarkers);
+			if (sentenceMarkers.size() == 0) {
+				System.out.println("we have 0 sentence markers for citance " + c);
+			}
+			//System.exit(1);
 		}
 		return ret;
 	}
