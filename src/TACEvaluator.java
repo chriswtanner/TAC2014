@@ -195,10 +195,10 @@ public class TACEvaluator {
 			predictions = getPerfectPredictions(referenceDocs, citances);
 		}
 		
-		List<Double> recall = scorePredictions(predictions);
+		//List<Double> recall = scorePredictions(predictions);
 		//displayStats(predictions);
 		//printSimilarityStats(predictions, 50);
-		//printSentenceImportance(citances); // prints the sentencePlacement graphs to results.csv
+		printSentenceImportance(citances); // prints the sentencePlacement graphs to results.csv
 	}
 
 
@@ -544,7 +544,7 @@ public class TACEvaluator {
 	// prints how important each Sentence is wrt its placement within its Doc
 	private static void printSentenceImportance(Set<Citance> citances) throws IOException {
 		double[] ret = new double[700];
-		double[] sectionLengths = new double[100];
+		double[] sectionLengths = new double[300];
 		int retSum = 0;
 		int sSum = 0;
 		for (Citance c : citances) {
@@ -1553,6 +1553,7 @@ public class TACEvaluator {
 	private static Map<Citance, List<IndexPair>> getJaccardWeightedPredictions(Map<String, Document> docs, Set<Citance> citances) {
 		
 		// displays wordWeights
+		/*
 		Iterator it2 = sortByValueDescending(wordWeights).keySet().iterator();
 		int numWords = 0;
 		while (it2.hasNext() && numWords < 200) {
@@ -1560,6 +1561,7 @@ public class TACEvaluator {
 			System.out.println(w + " = " + wordWeights.get(w));
 			numWords++;
 		}
+		*/
 		
 		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
 		
@@ -1618,19 +1620,50 @@ public class TACEvaluator {
 			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
 			int tmp=0;
 
+			/* original
 			while (it.hasNext()) {
 				Sentence s = (Sentence)it.next();
 				IndexPair i = new IndexPair(s.startPos, s.endPos);
 				sentenceMarkers.add(i);
-				
-				/*
-				if (tmp < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
-					//System.out.println("we have:" + sentenceScores.get(s) + " = " + s.sentence);
-				}
-				*/
-				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
 				tmp++;
 			}
+			*/
+			
+			// alternatively, let's always add sentences after and before, too: and no repeats
+			Set<Sentence> alreadyAdded = new HashSet<Sentence>();
+			while (it.hasNext()) {
+				// attempts to add current node
+				Sentence s = (Sentence)it.next();
+				if (!alreadyAdded.contains(s)) {
+					IndexPair i = new IndexPair(s.startPos, s.endPos);
+					sentenceMarkers.add(i);
+					alreadyAdded.add(s);
+				}
+
+				int sIndex = d.sentences.indexOf(s);
+				
+				// attempts to add Sentence after it
+				if (d.sentences.size() > (sIndex+1)) {
+					Sentence s2 = d.sentences.get(sIndex+1);
+					if (!alreadyAdded.contains(s2)) {
+						IndexPair i = new IndexPair(s2.startPos, s2.endPos);
+						sentenceMarkers.add(i);
+						alreadyAdded.add(s2);
+					}
+				}
+				
+				// attempts to add Sentence before it
+				if (sIndex > 0) {
+					Sentence s2 = d.sentences.get(sIndex-1);
+					if (!alreadyAdded.contains(s2)) {
+						IndexPair i = new IndexPair(s2.startPos, s2.endPos);
+						sentenceMarkers.add(i);
+						alreadyAdded.add(s2);
+					}
+				}
+				
+			}
+			
 			ret.put(c, sentenceMarkers);
 			if (sentenceMarkers.size() == 0) {
 				System.out.println("we have 0 sentence markers for citance " + c);
