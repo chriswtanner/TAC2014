@@ -35,10 +35,12 @@ public class Document {
 	List<Sentence> sentences = new ArrayList<Sentence>();
 	List<Integer> sectionMarkers = new ArrayList<Integer>(); // represents how many sentences we've seen so far, which precede the current section we just saw
 	List<String> sectionNames = new ArrayList<String>();
+	List<Integer> paragraphMarkers = new ArrayList<Integer>();
 	
-	List<String> introSections = new ArrayList<String>(Arrays.asList("Introduction", "Summary", "Main Text", "Abstract"));
+	
+	List<String> introSections = new ArrayList<String>(Arrays.asList("open archive", "introduction", "summary", "main text", "abstract"));
 	List<String> endPunctuations = new ArrayList<String>(Arrays.asList(".", ";", "!", "?", "\n"));
-	List<String> endSections = new ArrayList<String>(Arrays.asList("Acknowledgments", "References", "Footnotes"));
+	List<String> endSections = new ArrayList<String>(Arrays.asList("acknowledgments", "references", "footnotes"));
 	List<String> badFilteredChars = new ArrayList<String>(Arrays.asList(".", ",", "-"));
 	
   	// constructs a new Doc from the passed-in text file
@@ -49,8 +51,8 @@ public class Document {
 		String file = docDir + "data/" + topicID + "/Documents_Text/" + sourceName;
 
 		System.out.println("creating doc: " + file);
-		if (!sourceName.equals("Huang.txt")) {
-			return;
+		if (!sourceName.equals("Sherr.txt")) {
+			//return;
 		}
 	    File f = new File(file);
 	    FileInputStream fin = new FileInputStream(f);
@@ -89,6 +91,13 @@ public class Document {
 		    	// newlines clear the bracketCount
 		    	if (c == '\n') {
 		    		bracketCount = 0;
+		    		
+		    		// checks if we're entering a new paragraph!
+		    		if (i>0 && originalText.charAt(i-1) == '\n') {
+		    			if (!paragraphMarkers.contains(sentences.size())) { 
+		    				paragraphMarkers.add(sentences.size());
+		    			}
+		    		}
 		    	}
 		    	
 		    	// although we found an end-punctuation, we still need to ensure that it's the end of the sentence
@@ -118,7 +127,7 @@ public class Document {
 			    	}
 			    	
 		    		String curString = originalText.substring(lastSentenceMarker, i+1).trim(); // this includes character i
-		    		
+		    		String lowercased = curString.toLowerCase();
 		    		// (1) checks if we have a section name
 		    		boolean foundSection = false;
 		    		if (c == '\n') {
@@ -126,19 +135,19 @@ public class Document {
 		    			boolean isEndSection = false;
 		    			// checks if it's an 'end section'
 		    			for (String es : endSections) {
-			    			if (curString.equals(es)) {
+			    			if (lowercased.equals(es)) {
 				    			System.out.println("found end section?:" + es);
 			    				isEndSection = true;
 			    			}
 			    		}
-			    		if (isEndSection && lastMarkerWasNewLine) {
+			    		if (isEndSection) {
 			    			break;
 			    		}
 			    		
 		    			boolean isIntroSection = false;
 		    			// checks if it's an 'intro section'
-		    			for (String intro : introSections) {	
-		    				if (curString.equals(intro)) {
+		    			for (String intro : introSections) {
+		    				if (lowercased.equals(intro)) {
 			    				isIntroSection = true;
 			    				System.out.println("we found intro?:" + intro);
 			    			}
@@ -156,6 +165,8 @@ public class Document {
 		    					sentences.clear();
 		    					sectionMarkers.clear();
 		    					sectionNames.clear();
+		    					paragraphMarkers.clear();
+		    					paragraphMarkers.add(0);
 		    				}
 		    				// it's a new section, so let's add the marker
 		    				sectionMarkers.add(sentences.size());
@@ -171,11 +182,12 @@ public class Document {
 				    			}
 				    		}
 				    		// we found a new section
-				    		if (containsAlpha && curString.length() > 5 && curString.length() < 80 && !curString.startsWith("Fig.") && !curString.contains("<")
+				    		if (containsAlpha && curString.length() > 5 && curString.length() < 60 && !curString.startsWith("Fig.") && !curString.contains("<")
 				    			&& !curString.startsWith("Full-size image") && !curString.startsWith("Figure ") && !curString.startsWith("igure ")  && !curString.startsWith("Download")
 				    			&& !curString.startsWith("View ") && !curString.startsWith("Previous Section") && !curString.startsWith("Next Section")
 				    			&& !curString.startsWith("In this ") && !curString.startsWith("Keywords:") && !curString.startsWith("Formula") && !curString.startsWith("ormula")
-				    			&& !curString.startsWith("PDF ") && !curString.startsWith("Go to")
+				    			&& !curString.startsWith("PDF ") && !curString.startsWith("Go to") && !curString.startsWith("See also ")
+				    			&& !curString.startsWith("Show more") && !curString.startsWith("http://")
 				    			&& !curString.startsWith("Table") && !curString.startsWith("able ") && !curString.startsWith("Object name is") && !curString.contains("%")
 				    			&& !curString.trim().equals("") && !curString.contains("\t")) {
 				    			
@@ -196,21 +208,26 @@ public class Document {
 		    	    		String filteredText = filterText(originalText.substring(lastSentenceMarker,i+1));
 		    	    		
 		    	    		if (filteredText.indexOf("et al.") != filteredText.length()-6) {
-			    	    		Sentence s = new Sentence(lastSentenceMarker, i, filteredText);
+			    	    		Sentence s = new Sentence(lastSentenceMarker+1, i, filteredText);
 			    	    		sentences.add(s);
 			    	    		lastSentenceMarker = i+1;
 			    	    		
 			    	    		if (c == '\n') {
 					    			lastMarkerWasNewLine = true;
 					    		} else {
-					    			System.out.println("lastmarkerwasntnewline:" + curString + "END");
+					    			//System.out.println("lastmarkerwasntnewline:" + curString + "END");
 					    			lastMarkerWasNewLine = false;
 					    		}
 		    	    		}
 		    			}
 		    		}
 
-		    		if (c == '\n') {
+		    		// we found a new line, so let's adjust our lastSentenceMarker if we:
+		    		// - found a new section\n OR
+		    		// - haven't found intro yet;
+		    		// thus, if we have foundAnIntro already, the current line better be a legit Section,
+		    		// otherwise, we don't update our lastSentenceMarker
+		    		if (c == '\n') {// && (foundSection || !foundIntro)) {
 		    			lastMarkerWasNewLine = true;
 		    			lastSentenceMarker = i+1;
 		    		}
@@ -359,7 +376,11 @@ public class Document {
 	    	System.out.println("section name: " + s);
 	    }
 	    
-	    for (Sentence s : sentences){
+	    for (int i=0; i<sentences.size(); i++) {
+	    	if (paragraphMarkers.contains(i)) {
+	    		System.out.println("***");
+	    	}
+	    	Sentence s = sentences.get(i);
 	    	System.out.println("sent:" + s);
 	    	System.out.println("extr:(" + s.startPos + "," + s.endPos + "):" + originalText.substring(s.startPos, s.endPos+1));
 	    }

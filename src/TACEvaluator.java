@@ -195,10 +195,10 @@ public class TACEvaluator {
 			predictions = getPerfectPredictions(referenceDocs, citances);
 		}
 		
-		//List<Double> recall = scorePredictions(predictions);
+		List<Double> recall = scorePredictions(predictions);
 		//displayStats(predictions);
 		//printSimilarityStats(predictions, 50);
-		printSentenceImportance(citances); // prints the sentencePlacement graphs to results.csv
+		//printSentenceImportance(citances); // prints the sentencePlacement graphs to results.csv
 	}
 
 
@@ -1620,15 +1620,15 @@ public class TACEvaluator {
 			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
 			int tmp=0;
 
-			/* original
+			// original
 			while (it.hasNext()) {
 				Sentence s = (Sentence)it.next();
 				IndexPair i = new IndexPair(s.startPos, s.endPos);
 				sentenceMarkers.add(i);
 				tmp++;
 			}
-			*/
 			
+			/*
 			// alternatively, let's always add sentences after and before, too: and no repeats
 			Set<Sentence> alreadyAdded = new HashSet<Sentence>();
 			while (it.hasNext()) {
@@ -1663,7 +1663,7 @@ public class TACEvaluator {
 				}
 				
 			}
-			
+			*/
 			ret.put(c, sentenceMarkers);
 			if (sentenceMarkers.size() == 0) {
 				System.out.println("we have 0 sentence markers for citance " + c);
