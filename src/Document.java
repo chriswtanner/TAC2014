@@ -37,7 +37,6 @@ public class Document {
 	List<String> sectionNames = new ArrayList<String>();
 	List<Integer> paragraphMarkers = new ArrayList<Integer>();
 	
-	
 	List<String> introSections = new ArrayList<String>(Arrays.asList("open archive", "introduction", "summary", "main text", "abstract"));
 	List<String> endPunctuations = new ArrayList<String>(Arrays.asList(".", ";", "!", "?", "\n"));
 	List<String> endSections = new ArrayList<String>(Arrays.asList("acknowledgments", "references", "footnotes"));
@@ -120,7 +119,7 @@ public class Document {
 
 			    	// we found an end marker!  so, we potentially have a sentence; let's trim the beginning then
 			    	for (int j=lastSentenceMarker; j<i; j++) {
-			    		if (originalText.charAt(j) != ' ' || originalText.charAt(j) != '\t') {
+			    		if (originalText.charAt(j) != ' ' && originalText.charAt(j) != '\t') {
 			    			lastSentenceMarker = j;
 			    			break;
 			    		}
@@ -201,14 +200,14 @@ public class Document {
 		    		
 		    		// only if we didn't just find a Section can we consider the current line (curString)
 		    		// to be a Sentence
-		    		if (!foundSection && foundIntro) {
+		    		if (!foundSection) {// && foundIntro) {
 		    			
 		    			if ((i - lastSentenceMarker) >= minNumCharsPerSentence) {
 		    	    		
 		    	    		String filteredText = filterText(originalText.substring(lastSentenceMarker,i+1));
 		    	    		
 		    	    		if (filteredText.indexOf("et al.") != filteredText.length()-6) {
-			    	    		Sentence s = new Sentence(lastSentenceMarker+1, i, filteredText);
+			    	    		Sentence s = new Sentence(lastSentenceMarker, i, filteredText);
 			    	    		sentences.add(s);
 			    	    		lastSentenceMarker = i+1;
 			    	    		

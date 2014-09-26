@@ -30,6 +30,9 @@ public class TACEvaluator {
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
 	
+	static int numTriSentences = 0;
+	static int numBiSentences = 0;
+
 	// lda, jaccard, jaccardWeighted, jaccardCitanceWeighted, jaccardLength, raw, perfect, longest
 	static String method = "jaccardWeighted"; //lda"; 
 	
@@ -182,7 +185,7 @@ public class TACEvaluator {
 		} else if (method.equals("jaccard")) {
 			predictions = getJaccardPredictions(referenceDocs, citances);
 		} else if (method.equals("jaccardWeighted")) {
-			predictions = getJaccardWeightedPredictions(referenceDocs, citances);
+			predictions = getJaccardWeightedPredictions(referenceDocs, citances, ldaObject);
 		} else if (method.equals("jaccardCitanceWeighted")) {
 			predictions = getJaccardCitanceWeightedPredictions(referenceDocs, citances, ldaObject);
 		} else if (method.equals("jaccardLength")) {
@@ -307,9 +310,9 @@ public class TACEvaluator {
 					st2.nextToken();
 					doc = st2.nextToken();
 					//String id = topicID + "_" + doc;
-					if (!globalDocs.containsKey(topicID + "_" + doc)) {
+					if (!globalDocs.containsKey(topicID + ":" + doc)) {
 						Document d = new Document(docDir, topicID, doc);
-						globalDocs.put(topicID + "_" + doc, d);
+						globalDocs.put(topicID + ":" + doc, d);
 					}
 					//System.out.println("source: " + sourceName);
 				} else if (field.startsWith("Citing Article:")) {
@@ -317,9 +320,9 @@ public class TACEvaluator {
 					st2.nextToken();
 					st2.nextToken();
 					doc = st2.nextToken();
-					if (!globalDocs.containsKey(topicID + "_" + doc)) {
+					if (!globalDocs.containsKey(topicID + ":" + doc)) {
 						Document d = new Document(docDir, topicID, doc);
-						globalDocs.put(topicID + "_" + doc, d);
+						globalDocs.put(topicID + ":" + doc, d);
 					}
 					//System.out.println("CITING ARTICLE!: " + doc);
 				}
@@ -363,7 +366,7 @@ public class TACEvaluator {
 		for (String doc : globalDocs.keySet()) {
 
 			Document d = globalDocs.get(doc);
-			bout.write(d.topicID + "_" + d.name + " " + d.topicID + "_" + d.name);
+			bout.write(d.topicID + ":" + d.name + " " + d.topicID + ":" + d.name);
 			for (Sentence s : d.sentences) {
 				if (d.name.equals("Blasco.txt")) {
 					System.out.println("blasco sent: " + s.sentence);
@@ -1445,7 +1448,7 @@ public class TACEvaluator {
 			}
 			
 			// gets the words contained within the Citance doc
-			Document citanceDoc = globalDocs.get(c.topicID + "_" + c.citingDoc);
+			Document citanceDoc = globalDocs.get(c.topicID + ":" + c.citingDoc);
 			Set<String> citanceWords = new HashSet<String>();
 			for (Sentence s : citanceDoc.sentences) {
 				citanceWords.addAll(s.types);
@@ -1462,7 +1465,7 @@ public class TACEvaluator {
 				double currentWordProb = 0.00001;
 				for (int z=0; z<numTopics; z++) {
 					if (tmo.topicToWordProbabilities.get(z).containsKey(w)) {
-						currentWordProb += tmo.topicToWordProbabilities.get(z).get(w)*tmo.docToTopicProbabilities.get(c.topicID + "_" + c.citingDoc)[z];
+						currentWordProb += tmo.topicToWordProbabilities.get(z).get(w)*tmo.docToTopicProbabilities.get(c.topicID + ":" + c.citingDoc)[z];
 					}
 				}
 				if (currentWordProb > max) {
@@ -1550,7 +1553,7 @@ public class TACEvaluator {
 		return ret;
 	}
 	
-	private static Map<Citance, List<IndexPair>> getJaccardWeightedPredictions(Map<String, Document> docs, Set<Citance> citances) {
+	private static Map<Citance, List<IndexPair>> getJaccardWeightedPredictions(Map<String, Document> docs, Set<Citance> citances, String ldaObject) throws FileNotFoundException, IOException, ClassNotFoundException {
 		
 		// displays wordWeights
 		/*
@@ -1562,16 +1565,70 @@ public class TACEvaluator {
 			numWords++;
 		}
 		*/
+		ObjectInputStream in = new ObjectInputStream(new FileInputStream(ldaObject));
+		TopicModelObject tmo = (TopicModelObject)in.readObject();
+		int numTopics = tmo.topicToWordProbabilities.keySet().size();
+		double totalProb = 0;
+		double[] p_z = new double[numTopics];
+		for (int z = 0; z < numTopics; z++) {
+			double sum_d_z = 0;
+			for (String doc : tmo.docToTopicProbabilities.keySet()) {
+				sum_d_z += tmo.docToTopicProbabilities.get(doc)[z];
+			}
+			p_z[z] = sum_d_z;
+			totalProb += sum_d_z;
+		}
+		for (int z = 0; z < numTopics; z++) {
+			p_z[z] /= totalProb;
+		}
 		
 		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
 		
 		for (Citance c : citances) {
 			
+			Set<Integer> sentencesAdded = new HashSet<Integer>();
 			Map<Sentence, Double> sentenceScores = new HashMap<Sentence, Double>();
+			Map<Integer, Double> triSentenceScores = new HashMap<Integer, Double>();
+			Map<Integer, Double> biSentenceScores = new HashMap<Integer, Double>();
+			Map<Integer, Double> uniSentenceScores = new HashMap<Integer, Double>();
+			
 			List<IndexPair> sentenceMarkers = new ArrayList<IndexPair>();
+			Document citingDoc = globalDocs.get(c.topicID + ":" + c.citingDoc);
+			
+			// gets the Set of all words in the Citing DOC
+			Set<String> citingTypes = new HashSet<String>();
+			for (Sentence s : citingDoc.sentences) {
+				citingTypes.addAll(s.types);
+			}
+			System.out.println("citing doc:" + citingDoc.name + " contains " + citingTypes.size() + " unique types! " + citingDoc.sentences.size());
+			if (citingTypes.size() == 0) {
+				System.err.println("citing doc contains 0 types?!");
+			}
+			Set<String> citingDocTypes = removeStopwordsAndBadWords(citingTypes);
 			
 			// the non-stoplist types from the Citance
 			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
+			
+			List<String> citanceTokens = removeStopwordsAndBadWords(c.getTextTokensAsList());
+			
+			// determines the most popular TOPIC amongst Citance
+			int bestTopic = 0;
+			double mostLikelyProb = -9999999;
+			for (int z=0; z<numTopics; z++) {
+				double currentWordProb = 0;
+				for (String w : citanceTypes) { // also try TYPES
+					if (tmo.topicToWordProbabilities.get(z).containsKey(w)) {
+						currentWordProb += Math.log(tmo.topicToWordProbabilities.get(z).get(w));
+					} else {
+						System.out.println("we dont have:" + w);
+					}
+				}
+				if (currentWordProb > mostLikelyProb) {
+					mostLikelyProb = currentWordProb;
+					bestTopic = z;
+				}
+			}
+			System.out.println("citance's best topic:" + bestTopic + ":" + mostLikelyProb);
 			
 			//System.out.println("CITANCE: " + citanceTypes);
 			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
@@ -1582,9 +1639,65 @@ public class TACEvaluator {
 				System.err.println(d + " has 0 sentences");
 				System.exit(1);
 			}
-			for (Sentence s : d.sentences) {
+			
+			// calculates triSentence scores
+			for (int i=0; i<d.sentences.size()-2; i++) {
+				Sentence s = d.sentences.get(i);
+				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
+				
+				s = d.sentences.get(i+1);
+				curReferenceTypes.addAll(removeStopwordsAndBadWords(s.types));
+				
+				s = d.sentences.get(i+2);
+				curReferenceTypes.addAll(removeStopwordsAndBadWords(s.types));
+				
+				int intersection = 0;
+				for (String token : curReferenceTypes) {
+					if (citanceTypes.contains(token)) {
+						if (wordWeights.containsKey(token)) {
+							intersection += 1;
+						}
+					}
+				}
+				triSentenceScores.put(i, (double)intersection);
+			}
+		
+			// calculates biSentence scores
+			for (int i=0; i<d.sentences.size()-1; i++) {
+				Sentence s = d.sentences.get(i);
+				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
+				
+				s = d.sentences.get(i+1);
+				curReferenceTypes.addAll(removeStopwordsAndBadWords(s.types));
+				
+				int intersection = 0;
+				for (String token : curReferenceTypes) {
+					if (citanceTypes.contains(token)) {
+						if (wordWeights.containsKey(token)) {
+							intersection += 1;
+						}
+					}
+				}
+				biSentenceScores.put(i, (double)intersection);
+			}
+			
+			//for (Sentence s : d.sentences) {
+			for (int i=0; i<d.sentences.size(); i++) {
+				
+				Sentence s = d.sentences.get(i);
+				
 				Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
 				//System.out.println("REFERENCE:" + curReferenceTypes);
+				List<String> curReferenceTokens = removeStopwordsAndBadWords(s.tokens);
+				double curProb = 0;
+				for (String w : curReferenceTypes) {
+					if (tmo.topicToWordProbabilities.get(bestTopic).containsKey(w)) {
+						curProb += Math.log(tmo.topicToWordProbabilities.get(bestTopic).get(w)); //*p_z[bestTopic]);
+					}
+				}
+				curProb /= curReferenceTypes.size();
+				
+				// regular VanillaSum
 				double score = 0;
 				int intersection = 0;
 				for (String token : curReferenceTypes) {
@@ -1607,25 +1720,71 @@ public class TACEvaluator {
 						denom += 1; //wordWeights.get(w);
 					}
 				}
-				//System.out.println("union: " + union + " = " + denom);
 				
 				// ensures both the citance and reference sentences aren't just stopwords
 				if (curReferenceTypes.size() > 0 && citanceTypes.size() > 0 ) {
 					score = (double)intersection; // / (double)denom;
 				}
-				sentenceScores.put(s, score);
+				uniSentenceScores.put(i, score);
 			}
 			//System.exit(1);
 			//System.out.println("citance:" + c.citationText);
-			Iterator it = sortByValueDescending(sentenceScores).keySet().iterator();
+			
+			// adds trisentences
 			int tmp=0;
+			Iterator it = sortByValueDescending(triSentenceScores).keySet().iterator();
+			while (it.hasNext() && tmp<numTriSentences) {
+				
+				int sentenceStart = (Integer)it.next();
+				
+				if (!sentencesAdded.contains(sentenceStart) && !sentencesAdded.contains(sentenceStart+1) && !sentencesAdded.contains(sentenceStart+2)) {
+					int startPos = d.sentences.get(sentenceStart).startPos;
+					int endPos = d.sentences.get(sentenceStart+2).endPos;
+					IndexPair i = new IndexPair(startPos, endPos);
+					System.out.println("adding tri:" + i);
+					sentencesAdded.add(sentenceStart);
+					sentencesAdded.add(sentenceStart+1);
+					sentencesAdded.add(sentenceStart+2);
+					sentenceMarkers.add(i);
+					tmp++;	
+				}
 
-			// original
+			}
+
+			// adds biSentences
+			it = sortByValueDescending(biSentenceScores).keySet().iterator();
+			tmp = 0;
+			while (it.hasNext() && tmp<numBiSentences) {
+				int sentenceStart = (Integer)it.next();
+				
+				if (!sentencesAdded.contains(sentenceStart) && !sentencesAdded.contains(sentenceStart+1)) {
+					int startPos = d.sentences.get(sentenceStart).startPos;
+					int endPos = d.sentences.get(sentenceStart+1).endPos;
+					IndexPair i = new IndexPair(startPos, endPos);
+					System.out.println("adding bi:" + i);
+					sentencesAdded.add(sentenceStart);
+					sentencesAdded.add(sentenceStart+1);
+					sentenceMarkers.add(i);
+					tmp++;					
+				}
+			}
+
+			// original uniSentences
+			it = sortByValueDescending(uniSentenceScores).keySet().iterator();
+			tmp = 0;
 			while (it.hasNext()) {
-				Sentence s = (Sentence)it.next();
-				IndexPair i = new IndexPair(s.startPos, s.endPos);
-				sentenceMarkers.add(i);
-				tmp++;
+				
+				int sentenceStart = (Integer)it.next();
+				
+				if (!sentencesAdded.contains(sentenceStart)) {
+					Sentence s = d.sentences.get(sentenceStart);	
+					IndexPair i = new IndexPair(s.startPos, s.endPos);
+					if (tmp < 10) {
+						System.out.println("adding uni:" + i);
+					}
+					sentenceMarkers.add(i);
+					tmp++;					
+				}
 			}
 			
 			/*
@@ -1919,7 +2078,7 @@ public class TACEvaluator {
 				}
 			}
 			
-			String uid = topicID + "_" + Integer.toString(citanceNum);
+			String uid = topicID + ":" + Integer.toString(citanceNum);
 			Citance c = null;
 			if (uidToCitance.containsKey(uid)) {
 				c = uidToCitance.get(uid);

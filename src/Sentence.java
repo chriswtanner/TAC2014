@@ -50,6 +50,6 @@ public class Sentence {
 	}
 	
 	public String toString() {
-		return "(" + startPos + "," + endPos + "): " + sentence;
+		return "(" + startPos + "," + endPos + "):" + sentence;
 	}
 }
