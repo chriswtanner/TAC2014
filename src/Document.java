@@ -135,7 +135,7 @@ public class Document {
 		    			// checks if it's an 'end section'
 		    			for (String es : endSections) {
 			    			if (lowercased.equals(es)) {
-				    			System.out.println("found end section?:" + es);
+				    			//System.out.println("found end section?:" + es);
 			    				isEndSection = true;
 			    			}
 			    		}
@@ -148,7 +148,7 @@ public class Document {
 		    			for (String intro : introSections) {
 		    				if (lowercased.equals(intro)) {
 			    				isIntroSection = true;
-			    				System.out.println("we found intro?:" + intro);
+			    				//System.out.println("we found intro?:" + intro);
 			    			}
 		    			}
 		    			
@@ -190,7 +190,7 @@ public class Document {
 				    			&& !curString.startsWith("Table") && !curString.startsWith("able ") && !curString.startsWith("Object name is") && !curString.contains("%")
 				    			&& !curString.trim().equals("") && !curString.contains("\t")) {
 				    			
-				    			System.out.println("found section:" + curString);
+				    			//System.out.println("found section:" + curString);
 				    			sectionMarkers.add(sentences.size());
 				    			sectionNames.add(curString);
 				    			foundSection = true;
@@ -204,9 +204,35 @@ public class Document {
 		    			
 		    			if ((i - lastSentenceMarker) >= minNumCharsPerSentence) {
 		    	    		
+	    	    			int mid = (int) Math.floor((i + lastSentenceMarker)/2);
+		    				
 		    	    		String filteredText = filterText(originalText.substring(lastSentenceMarker,i+1));
+		    	    		String filteredFirst = filterText(originalText.substring(lastSentenceMarker,mid+1));
+		    	    		String filteredSecond = filterText(originalText.substring(mid+1,i+1));
+		    	    		
+		    	    		/*
+		    	    		if (filteredFirst.indexOf("et al.") != filteredFirst.length()-6) {
+
+			    	    		Sentence s = new Sentence(lastSentenceMarker, mid, filteredFirst);
+			    	    		sentences.add(s);
+			    	    		
+			    	    		Sentence s2 = new Sentence(mid+1, i, filteredSecond);
+			    	    		sentences.add(s2);
+			    	    		lastSentenceMarker = i+1;
+			    	    		
+			    	    		
+			    	    		
+			    	    		if (c == '\n') {
+					    			lastMarkerWasNewLine = true;
+					    		} else {
+					    			//System.out.println("lastmarkerwasntnewline:" + curString + "END");
+					    			lastMarkerWasNewLine = false;
+					    		}
+		    	    		}
+		    	    		*/
 		    	    		
 		    	    		if (filteredText.indexOf("et al.") != filteredText.length()-6) {
+
 			    	    		Sentence s = new Sentence(lastSentenceMarker, i, filteredText);
 			    	    		sentences.add(s);
 			    	    		lastSentenceMarker = i+1;
@@ -218,6 +244,7 @@ public class Document {
 					    			lastMarkerWasNewLine = false;
 					    		}
 		    	    		}
+		    	    		
 		    			}
 		    		}
 
@@ -372,16 +399,16 @@ public class Document {
 	    */
 	    
 	    for (String s : sectionNames) {
-	    	System.out.println("section name: " + s);
+	    	//System.out.println("section name: " + s);
 	    }
 	    
 	    for (int i=0; i<sentences.size(); i++) {
 	    	if (paragraphMarkers.contains(i)) {
-	    		System.out.println("***");
+	    		//System.out.println("***");
 	    	}
 	    	Sentence s = sentences.get(i);
-	    	System.out.println("sent:" + s);
-	    	System.out.println("extr:(" + s.startPos + "," + s.endPos + "):" + originalText.substring(s.startPos, s.endPos+1));
+	    	//System.out.println("sent:" + s);
+	    	//System.out.println("extr:(" + s.startPos + "," + s.endPos + "):" + originalText.substring(s.startPos, s.endPos+1));
 	    }
 	    
 	    /*
