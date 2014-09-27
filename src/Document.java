@@ -187,12 +187,16 @@ public class Document {
 				    			&& !curString.startsWith("In this ") && !curString.startsWith("Keywords:") && !curString.startsWith("Formula") && !curString.startsWith("ormula")
 				    			&& !curString.startsWith("PDF ") && !curString.startsWith("Go to") && !curString.startsWith("See also ")
 				    			&& !curString.startsWith("Show more") && !curString.startsWith("http://")
+				    			&& !curString.startsWith("equation image") && !curString.startsWith("back to top")
+				    			&& !curString.startsWith("(docx)") && !curString.startsWith("keywords")
+				    			&& !curString.startsWith("abbreviations") && !curString.startsWith("click here for")
+				    			&& !curString.startsWith("ppt ") && !curString.startsWith("additional file")
 				    			&& !curString.startsWith("Table") && !curString.startsWith("able ") && !curString.startsWith("Object name is") && !curString.contains("%")
 				    			&& !curString.trim().equals("") && !curString.contains("\t")) {
 				    			
 				    			//System.out.println("found section:" + curString);
 				    			sectionMarkers.add(sentences.size());
-				    			sectionNames.add(curString);
+				    			sectionNames.add(curString.toLowerCase());
 				    			foundSection = true;
 				    		}
 		    			}

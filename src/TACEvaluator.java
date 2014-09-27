@@ -30,6 +30,8 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	static boolean runLDA = false;
+	static boolean evalSVM = false;
+	static boolean writeSVM = false;
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -55,6 +57,9 @@ public class TACEvaluator {
 
 	static String svmTraining = dataDir + "svm_train.txt";
 	static String svmTesting = dataDir + "svm_test.txt";
+	static String svmPredictions = dataDir + "testing.predictions";
+	static String svmTruth = dataDir + "svm_truth.txt";
+	
 	static int negativeRatio = 5;
 	// LDA's input files
 	static String annoInputFile = dataDir + "annoLegend.txt";
@@ -70,10 +75,17 @@ public class TACEvaluator {
 	static Set<String> badWords = new HashSet<String>();
 	static Map<String, Double> wordWeights = new HashMap<String, Double>();
 	
+	static Map<Citance, HashMap<Sentence, Double>> citancePredictions = new HashMap<Citance, HashMap<Sentence, Double>>();
+	
 	static List<String> testTopics = new ArrayList<String>(Arrays.asList("D1402_TRAIN", "D1403_TRAIN", "D1407_TRAIN",
-			"D1408_TRAIN", "D1410_TRAIN", "D1412_TRAIN", "D1415_TRAIN", "D1418_TRAIN"));
+			"D1408_TRAIN", "D1410_TRAIN"));
+	
+	static List<String> goodSectionNames = new ArrayList<String>(Arrays.asList("results", "discussion", "introduction", 
+			"abstract", "experimental", "open archive", "materials", "acknowledgements", "summary", "supporting",
+			"background", "supplementary material", "statistical", "methods", "conclusion", "highlights", "keywords")); 
 	
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
+		Set<Citance> citances = loadCitances(annoInputFile);
 		
 		stopwords = loadStopwords(stopwordsFile);
 		
@@ -84,12 +96,36 @@ public class TACEvaluator {
 		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		referenceDocs = loadReferenceDocuments(annoInputFile);
 
-		Set<Citance> citances = loadCitances(annoInputFile);
+		Map<String, Integer> sectionCounts = new HashMap<String, Integer>();
+		for (String doc : globalDocs.keySet()){
+			Document d = globalDocs.get(doc);
+			
+			for (String section : d.sectionNames) {
+				String s = section.toLowerCase();
+				if (sectionCounts.containsKey(s)) {
+					sectionCounts.put(s, sectionCounts.get(s)+1);
+				} else {
+					sectionCounts.put(s, 1);
+				}
+			}
+		}
+		Iterator it = sortByValueDescending(sectionCounts).keySet().iterator();
+		while (it.hasNext()) {
+			String s = (String)it.next();
+			System.out.println(s + " " + sectionCounts.get(s));
+		}
+		//System.exit(1);
+		
 		// NOTE: LDA variables/params are in the LDA's class as global vars
 		if (runLDA) {
 			LDA l = new LDA(malletInputFile, stopwordsFile);
 			l.runLDA();
 			l.saveLDA(ldaObject);
+		}
+		
+		if (evalSVM) {	
+			evalSVM(citances);
+			return;
 		}
 		
 		// runs the lda-saved model to create topics per sentence
@@ -115,7 +151,20 @@ public class TACEvaluator {
 			predictions = getPerfectPredictions(referenceDocs, citances);
 		}
 		
-		writeSVMTraining(citances, sentencePredictions);
+		if (writeSVM) {
+			writeSVMFiles(citances, sentencePredictions);
+		} else {
+			scorePredictions(sentencePredictions);
+		}
+		//List<Double> recall = scorePredictions(predictions);
+		/*
+		TODO: make a svm truth file that outputs, too, and it should be fomrated:
+			TOPIC:citancenum startindex-endindex 
+			 and make a method called svmeval() (which will run if a 'true' boolean is represented)
+			 which just reads the eval file and sorts based on each unique TOPIC:citancenum
+			 and prints the weighted F1 scores
+			 also make another method that evaluates just the testing docs on this, too
+		*/
 		
 		//List<Double> recall = scorePredictions(predictions);
 		//displayStats(predictions);
@@ -211,11 +260,75 @@ public class TACEvaluator {
 
 	}
 
+	// we know the truth for these svm citances, so let's plot it
+	private static void evalSVM(Set<Citance> citances) throws IOException {
+		// reads the prediction file and truth file simultaneously
+		BufferedReader bPredictions = new BufferedReader(new FileReader(svmPredictions));
+		BufferedReader bTruth = new BufferedReader(new FileReader(svmTruth));
+		bPredictions.readLine(); // skips over header
+		System.out.println("reading " + svmPredictions);
+		String curLine = "";
+		citancePredictions = new HashMap<Citance, HashMap<Sentence, Double>>();
+		while ((curLine = bPredictions.readLine())!=null) {
+			// prob for the given Citance
+			StringTokenizer st = new StringTokenizer(curLine);
+			st.nextToken();
+			double prob = Double.parseDouble(st.nextToken());
+			
+			curLine = bTruth.readLine();
+			st = new StringTokenizer(curLine);
+			String first = st.nextToken();
+			String second = st.nextToken();
+			String topicID = first.split(":")[0];
+			int citanceNum = Integer.parseInt(first.split(":")[1]);
+			int startPos = Integer.parseInt(second.split("-")[0]);
+			int endPos = Integer.parseInt(second.split("-")[1]);
+			
+			// finds the citance
+			Citance c = null;
+			for (Citance c1 : citances) {
+				if (c1.topicID.equals(topicID) & c1.citanceNum == citanceNum) {
+					c = c1;
+					break;
+				}
+			}
+			if (c == null) {
+				System.err.println("couldnt find the Citance!!");
+				System.exit(1);
+			}
+			
+			HashMap<Sentence, Double> curProbs = new HashMap<Sentence, Double>();
+			if (citancePredictions.containsKey(c)) {
+				curProbs = citancePredictions.get(c);				
+			}
+			Sentence s = new Sentence(startPos, endPos, "");
+			//IndexPair i = new IndexPair(startPos, endPos);
+			curProbs.put(s, prob);
+			citancePredictions.put(c, curProbs);
+		}
+		
+		// turns intno a ranked list
+		Map<Citance, List<Sentence>> predictions = new HashMap<Citance, List<Sentence>>();
+		for (Citance c : citancePredictions.keySet()) {
+			
+			List<Sentence> rankedList = new ArrayList<Sentence>();
+			Iterator it = sortByValueDescending(citancePredictions.get(c)).keySet().iterator();
+			while (it.hasNext()) {
+				Sentence s = (Sentence)it.next(); //new IndexPair(s.startPos, s.endPos);
+				rankedList.add(s);
+			}
+			predictions.put(c, rankedList);
+		}
+		System.out.println("predictions" + predictions);
+		scorePredictions(predictions);
+	}
 
-	private static void writeSVMTraining(Set<Citance> citances, Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
+
+	private static void writeSVMFiles(Set<Citance> citances, Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
 		
 		BufferedWriter bTraining = new BufferedWriter(new FileWriter(svmTraining));
 		BufferedWriter bTesting = new BufferedWriter(new FileWriter(svmTesting));
+		BufferedWriter bTruth = new BufferedWriter(new FileWriter(svmTruth));
 		Random rand = new Random();
 		for (Citance c : citances) {
 			
@@ -258,7 +371,14 @@ public class TACEvaluator {
 				}
 				
 			} else { // testing Citance
+				// and the truth file which helps us know which prediction is actually which citance and reference indexpair
+				//TOPIC:citancenum startindex-endindex 
+				//System.out.println("citance " + c.topicID + ":" + c.citanceNum + " has " + sentencePredictions.get(c).size() + " sents");
 				for (Sentence s : sentencePredictions.get(c)) {
+					
+					// writesthe truth part
+					bTruth.write(c.topicID + ":" + c.citanceNum + " " + s.startPos + "-" + s.endPos + "\n");
+					
 					double prec = s.getPrecision(c.annotations);
 					if (prec > .8) {
 						String line = "+1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc));
@@ -272,6 +392,7 @@ public class TACEvaluator {
 		} // end of iterating over all Citances
 		bTraining.close();
 		bTesting.close();
+		bTruth.close();
 	}
 
 
@@ -284,34 +405,11 @@ public class TACEvaluator {
 		//System.out.println("ref doc: " + document.name);
 		features.add((double)rankPOS);
 		
-		// jaccard
-		Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
-		Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
-		int intersection = 0;
-		for (String token : curReferenceTypes) {
-			if (citanceTypes.contains(token)) {
-				if (wordWeights.containsKey(token)) {
-					intersection += 1;
-				}
-			}
-		}
 		
-		Set<String> union = new HashSet<String>(citanceTypes);
-		union.addAll(curReferenceTypes);
-		double denom = 0.000001;
-		for (String w : union) {
-			if (curReferenceTypes.contains(w) && citanceTypes.contains(w)) {
-				continue;
-			}
-			if (wordWeights.containsKey(w)) {
-				denom += 1;
-			}
-		}
-		double score = (double)intersection / (double)denom;
-		features.add(score);
+		//double score = (double)intersection / (double)denom;
+		//features.add((double)intersection);
 		
-		
-		features.add((double)s.sentence.length());
+		//features.add((double)s.sentence.length());
 		
 		// placement within doc
 		int docPlacement = document.sentences.size();
@@ -324,19 +422,39 @@ public class TACEvaluator {
 				break;
 			}
 		}
-		features.add((double)docPlacement);
+		//features.add((double)docPlacement);
 		
 		// placement within Section
 		int sectionPlacement = docPlacement;
 		//System.out.println("sec markers:" + document.sectionMarkers);
+		
+		String sectionName = "";
 		for (int i=1; i<document.sectionMarkers.size(); i++) {
 			if (document.sectionMarkers.get(i) > docPlacement) {
 				sectionPlacement = (docPlacement - document.sectionMarkers.get(i-1));
+				sectionName = document.sectionNames.get(i-1).toLowerCase();
 				//System.out.println(" **** we found section placement");
 				break;
 			}
 		}
-		features.add((double)Math.min(docPlacement, sectionPlacement));
+		//System.out.println("doc " + document.name + " sent:" + s.sentence + " has section:" + sectionName);
+		boolean foundSection = false;
+		for (String sec : goodSectionNames) {
+			if (sectionName.indexOf(sec) != -1) {
+				//features.add(1.0);
+				//System.out.println("sec: " + sec);
+				//foundSection = true;
+			} else {
+				//features.add(0.0);
+			}
+		}
+		
+		// other section
+		if (!foundSection) {
+			//features.add(1.0);
+		}
+		
+		//features.add((double)Math.min(docPlacement, sectionPlacement));
 		
 		// placement within Paragraph
 		int paragraphPlacement = sectionPlacement;
@@ -346,7 +464,12 @@ public class TACEvaluator {
 				break;
 			}
 		}
-		features.add((double)Math.min(sectionPlacement, paragraphPlacement));
+		//features.add((double)Math.min(sectionPlacement, paragraphPlacement));
+		
+		//features.clear();
+		//features.add((double)rankPOS);
+		Random rand = new Random();
+		features.add(rand.nextDouble());
 		
 		// converts features to a String
 		for (int i=1; i<=features.size(); i++) {
@@ -354,7 +477,6 @@ public class TACEvaluator {
 		}
 		return ret.trim();
 	}
-
 
 	// sets the word weights for every word that's found within the topic model
 	// 0 = vanilla; non-stopwords = 1 (stopwords = 0 because mallet-tac doens't include them, plus jaccard ignores them anyway)
@@ -519,9 +641,7 @@ public class TACEvaluator {
 			Document d = globalDocs.get(doc);
 			bout.write(d.topicID + ":" + d.name + " " + d.topicID + ":" + d.name);
 			for (Sentence s : d.sentences) {
-				if (d.name.equals("Blasco.txt")) {
-					System.out.println("blasco sent: " + s.sentence);
-				}
+				
 				List<String> curReferenceTokens = removeStopwordsAndBadWords(s.tokens);
 				for (String w : curReferenceTokens) {
 					if (!badWords.contains(w)) {
@@ -847,7 +967,7 @@ public class TACEvaluator {
 	*/
 	
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
-	private static List<Double> scorePredictions(Map<Citance, List<IndexPair>> predictions) throws IOException {
+	private static List<Double> scorePredictions(Map<Citance, List<Sentence>> predictions) throws IOException {
 		List<Double> f1 = new ArrayList<Double>();
 		Map<Integer, List<Double>> f1Sums = new HashMap<Integer, List<Double>>();
 		BufferedWriter bout = new BufferedWriter(new FileWriter(resultsOut));
@@ -857,6 +977,10 @@ public class TACEvaluator {
 		// (i.e., let 300 be the lengthiest doc; a 200-sentence doc will include its coverage % for sentences 201-300)
 		int maxLengthOfDoc = 0;
 		for (Citance c : predictions.keySet()) {
+			if (!testTopics.contains(c.topicID)) {
+				continue;
+			}
+			
 			if (predictions.get(c).size() > maxLengthOfDoc) {
 				maxLengthOfDoc = predictions.get(c).size();
 			}
@@ -864,7 +988,9 @@ public class TACEvaluator {
 		
 		System.out.println("most sentences in any reference doc: " + maxLengthOfDoc);
 		for (Citance c : predictions.keySet()) {
-			
+			if (!testTopics.contains(c.topicID)) {
+				continue;
+			}
 			//System.out.println("citance: " + c.citationText);
 			
 			// only tmp used for printing jaccard stuff
@@ -877,7 +1003,8 @@ public class TACEvaluator {
 				
 				// look at the Citance's actual returned sentence
 				if (i<predictions.get(c).size()) {
-					IndexPair eachSentenceMarkers = predictions.get(c).get(i);
+					Sentence s = predictions.get(c).get(i);
+					IndexPair eachSentenceMarkers = new IndexPair(s.startPos, s.endPos);
 					
 					d.fillBytes(eachSentenceMarkers);
 					
@@ -1736,7 +1863,8 @@ public class TACEvaluator {
 		Map<Citance, List<Sentence>> ret = new HashMap<Citance, List<Sentence>>();
 		
 		for (Citance c : citances) {
-			
+			// checks if training Citance
+
 			Set<Integer> sentencesAdded = new HashSet<Integer>();
 			Map<Sentence, Double> sentenceScores = new HashMap<Sentence, Double>();
 			Map<Integer, Double> triSentenceScores = new HashMap<Integer, Double>();
@@ -2246,9 +2374,6 @@ public class TACEvaluator {
 			//}
 		}
 		
-		Citance c = uidToCitance.get("D1415_TRAIN:Blasco.txt");
-		System.out.println(uidToCitance);
-		//System.exit(1);
 		return ret;
 	}
 
