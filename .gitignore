@@ -9,3 +9,5 @@
 /official_docs/*
 /TAC_2014_BiomedSumm_Training_Data*/*
 *.tgz
+*.txt
+*.pdf
