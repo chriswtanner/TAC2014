@@ -29,9 +29,13 @@ public class TACEvaluator {
 	// NOTE: simply change this value
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
+	
+	static boolean fullSet = false;
+	
 	static boolean runLDA = false;
 	static boolean evalSVM = false;
 	static boolean writeSVM = true;
+	static String fileSuffix = "_ns";
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -55,10 +59,10 @@ public class TACEvaluator {
 	static String resultsOut = dataDir + "results.csv";
 	static String statsOut = dataDir + "stats.csv";
 
-	static String svmTraining = dataDir + "svm_train.txt";
-	static String svmTesting = dataDir + "svm_test.txt";
+	static String svmTraining = dataDir + "svm_train" + fileSuffix + ".txt";
+	static String svmTesting = dataDir + "svm_test" + fileSuffix + ".txt";
 	static String svmPredictions = dataDir + "testing.predictions";
-	static String svmTruth = dataDir + "svm_truth.txt";
+	static String svmTruth = dataDir + "svm_truth" + fileSuffix + ".txt";
 	
 	static int negativeRatio = 5;
 	// LDA's input files
@@ -66,7 +70,8 @@ public class TACEvaluator {
 	static String malletInputFile = dataDir + "mallet-tac.txt";
 	static String stopwordsFile = dataDir + "stopwords.txt";
 
-	static Set<String> referenceDocs = new HashSet<String>();
+
+	//static Set<String> referenceDocs = new HashSet<String>();
 	//static Map<String, Document> referenceDocs = new HashMap<String, Document>(); // stores just the reference docs
 	static Map<String, Document> globalDocs = new HashMap<String, Document>(); // stores both the reference and citance docs
 	
@@ -78,6 +83,8 @@ public class TACEvaluator {
 	static Set<String> globalCitanceTypes = new HashSet<String>();
 	static Set<String> globalReferenceTypes = new HashSet<String>();
 	static Set<String> globalIntersectionTypes = new HashSet<String>();
+	
+	static Set<Integer> selectedFeatures = new HashSet<Integer>(); 
 	
 	static Map<Citance, List<Sentence>> citanceSentencesRanked = new HashMap<Citance, List<Sentence>>();
 	//static Map<Citance, HashMap<Sentence, Double>> citancePredictions = new HashMap<Citance, HashMap<Sentence, Double>>();
@@ -92,6 +99,12 @@ public class TACEvaluator {
 			"background", "supplementary material", "statistical", "methods", "conclusion", "highlights", "keywords")); 
 	
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
+		if (fullSet) {
+			annoInputFile = dataDir + "annoLegend-all.txt";
+			malletInputFile = dataDir + "mallet-tac-all.txt";
+			testTopics = new ArrayList<String>();
+		}
+		
 		Set<Citance> citances = loadCitances(annoInputFile);
 		
 		stopwords = loadStopwords(stopwordsFile);
@@ -101,7 +114,7 @@ public class TACEvaluator {
 		
 		//System.exit(1);
 		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
-		referenceDocs = loadReferenceDocuments(annoInputFile);
+		//referenceDocs = loadReferenceDocuments(annoInputFile);
 
 		Map<String, Integer> sectionCounts = new HashMap<String, Integer>();
 		for (String doc : globalDocs.keySet()){
@@ -136,7 +149,7 @@ public class TACEvaluator {
 		}
 		
 		// runs the lda-saved model to create topics per sentence
-		Map<Citance, List<IndexPair>> predictions = null;
+		//Map<Citance, List<IndexPair>> predictions = null;
 		Map<Citance, List<Sentence>> sentencePredictions = null;
 		if (method.equals("lda")) {
 			ObjectInputStream in = new ObjectInputStream(new FileInputStream(ldaObject));
@@ -145,7 +158,7 @@ public class TACEvaluator {
 		} else if (method.equals("jaccard")) {
 			//predictions = getJaccardPredictions(referenceDocs, citances);
 		} else if (method.equals("jaccardWeighted")) {
-			sentencePredictions = getJaccardWeightedPredictions(referenceDocs, citances, ldaObject);
+			sentencePredictions = getJaccardWeightedPredictions(citances, ldaObject);
 		} else if (method.equals("jaccardCitanceWeighted")) {
 			//predictions = getJaccardCitanceWeightedPredictions(referenceDocs, citances, ldaObject);
 		} else if (method.equals("jaccardLength")) {
@@ -350,11 +363,14 @@ public class TACEvaluator {
 		BufferedWriter bTesting = new BufferedWriter(new FileWriter(svmTesting));
 		BufferedWriter bTruth = new BufferedWriter(new FileWriter(svmTruth));
 		Random rand = new Random();
+		Sentence lastS = null;
+		Citance lastC = null;
+		Document lastD = null;
 		for (Citance c : citances) {
 			
 
 			// training Citance
-			if (!testTopics.contains(c.topicID)) {
+			if (!testTopics.contains(c.topicID) || c.topicID.contains("EVAL")) {
 				//System.out.println("citance:" + c.topicID + " " + c.citingDoc + " " + c.referenceDoc + " " + c.citationText);
 				Set<Sentence> positives = new HashSet<Sentence>();
 				List<Sentence> negatives = new ArrayList<Sentence>();
@@ -382,13 +398,16 @@ public class TACEvaluator {
 				//System.out.println("pos:" + positives.size() + " neg:" + selectedNegatives.size());
 				
 				for (Sentence s : positives) {
-					String line = "+1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc));
+					String line = "+1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc), -1);
 					//System.out.println("line:" + line);
 					bTraining.write(line + "\n");
 				}
 				for (Sentence s : selectedNegatives) {
-					String line = "-1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc));
+					String line = "-1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc), -1);
 					bTraining.write(line + "\n");
+					lastS = s;
+					lastC = c;
+					lastD = globalDocs.get(c.topicID + ":" + c.referenceDoc);
 				}
 				
 			} else { // testing Citance
@@ -400,23 +419,35 @@ public class TACEvaluator {
 					// writesthe truth part
 					bTruth.write(c.topicID + ":" + c.citanceNum + " " + s.startPos + "-" + s.endPos + "\n");
 					
-					double prec = s.getPrecision(c.annotations);
+					double prec = 0;
+					if (!fullSet && !c.topicID.contains("_EVAL")) {
+						prec = s.getPrecision(c.annotations);
+					}
 					if (prec > .8) {
-						String line = "+1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc));
+						String line = "+1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc), -1);
 						bTesting.write(line + "\n");
 					} else {
-						String line = "-1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc));
+						String line = "-1 " + getSVMFeatures(sentencePredictions.get(c).indexOf(s), s, c, globalDocs.get(c.topicID + ":" + c.referenceDoc), -1);
 						bTesting.write(line + "\n");
 					}
 				}
 			}
 		} // end of iterating over all Citances
+		
+		System.out.println("we've seen " + selectedFeatures.size() + " of " + allUsefulWords.size() + " word features");
+		// ensures training has seen everything
+		for (int ew=0; ew<allUsefulWords.size(); ew++) {
+			//if (!selectedFeatures.contains(ew)) {
+				String line = "-1 " + getSVMFeatures(900, lastS, lastC, lastD, ew);
+				bTraining.write(line + "\n");
+			//}
+		}
 		bTraining.close();
 		bTesting.close();
 		bTruth.close();
 	}
 
-	private static String getSVMFeatures(int rankPOS, Sentence s, Citance c, Document document) {
+	private static String getSVMFeatures(int rankPOS, Sentence s, Citance c, Document document, int forcedBit) {
 		String ret = "";
 		
 		List<Double> features = new ArrayList<Double>();
@@ -433,17 +464,34 @@ public class TACEvaluator {
 			}
 		}
 		
-		features.add((double)intersection);
-		
+
 		// feature for each word
-		for (String w : allUsefulWords) {
-			if (curReferenceTypes.contains(w) && citanceTypes.contains(w)) {
-				features.add(1.0);
+		for (int ew=0; ew<allUsefulWords.size(); ew++) {
+			String w = allUsefulWords.get(ew);
+
+			if (forcedBit == -1) {
+				if ((curReferenceTypes.contains(w) && citanceTypes.contains(w))) {
+					features.add(1.0);
+					selectedFeatures.add(ew);
+				} else {
+					features.add(0.0);
+				}
 			} else {
-				features.add(0.0);
+				if (forcedBit == ew) {
+					System.out.println("adding " + ew + ":1");
+					features.add(1.0);
+				} else {
+					features.add(0.0);
+				}
 			}
+
 		}
 		
+		if (forcedBit == -1) {
+			features.add((double)intersection);
+		} else {
+			features.add((double)0);
+		}
 		
 		//System.out.println("cit:" + c.topicID + " " + c.citationText + " ref:" + c.referenceDoc);
 		//System.out.println("sent:" + s);
@@ -472,11 +520,9 @@ public class TACEvaluator {
 				break;
 			}
 		}
-		//features.add((double)bestNeighborPos);
-		//double score = (double)intersection / (double)denom;
-		//features.add((double)intersection);
 		
-		features.add((double)s.sentence.length());
+
+
 		
 		// placement within doc
 		int docPlacement = document.sentences.size();
@@ -489,7 +535,8 @@ public class TACEvaluator {
 				break;
 			}
 		}
-		features.add((double)docPlacement);
+		
+		//System.out.println("sent placement within doc: " + docPlacement);
 		
 		// placement within Section
 		int sectionPlacement = docPlacement;
@@ -505,24 +552,25 @@ public class TACEvaluator {
 			}
 		}
 		//System.out.println("doc " + document.name + " sent:" + s.sentence + " has section:" + sectionName);
+		
+		/*
 		boolean foundSection = false;
 		for (String sec : goodSectionNames) {
-			if (sectionName.indexOf(sec) != -1) {
+			if (sectionName.indexOf(sec) != -1 && forcedBit == -1) {
 				features.add(1.0);
 				//System.out.println("sec: " + sec);
 				//foundSection = true;
-			} else {
+			} else if (forcedBit == -1){
 				features.add(0.0);
 			}
 		}
 		
 		// other section
-		if (!foundSection) {
+		if (!foundSection || forcedBit != -1) {
 			features.add(1.0);
 		}
-		
-		features.add((double)Math.min(docPlacement, sectionPlacement));
-		
+		*/
+
 		// placement within Paragraph
 		int paragraphPlacement = sectionPlacement;
 		for (int i=1; i<document.paragraphMarkers.size(); i++) {
@@ -531,12 +579,30 @@ public class TACEvaluator {
 				break;
 			}
 		}
-		features.add((double)Math.min(sectionPlacement, paragraphPlacement));
-		
+
 		//features.clear();
 		//features.add((double)rankPOS);
 		Random rand = new Random();
 		//features.add(rand.nextDouble());
+		
+		
+		if (forcedBit == -1) {
+			//features.add((double)bestNeighborPos);
+			features.add((double)s.sentence.length());
+			features.add((double)docPlacement);
+			features.add((double)Math.min(docPlacement, sectionPlacement));
+			features.add((double)Math.min(sectionPlacement, paragraphPlacement));
+		} else {
+			double t = (double)(rand.nextInt((400-250)+1) + 250);
+			//features.add(t);
+			features.add((double)rand.nextInt((7-4)+1)+4);
+			features.add(t);
+			features.add((double)rand.nextInt((100 - 80)+1)+80);
+			features.add((double)rand.nextInt((60-20)+1) + 20);
+		}
+
+		
+		
 		
 		// converts features to a String
 		for (int i=1; i<=features.size(); i++) {
@@ -1899,7 +1965,7 @@ public class TACEvaluator {
 		return ret;
 	}
 	
-	private static Map<Citance, List<Sentence>> getJaccardWeightedPredictions(Set<String> refDocs, Set<Citance> citances, String ldaObject) throws FileNotFoundException, IOException, ClassNotFoundException {
+	private static Map<Citance, List<Sentence>> getJaccardWeightedPredictions(Set<Citance> citances, String ldaObject) throws FileNotFoundException, IOException, ClassNotFoundException {
 		
 		// displays wordWeights
 		/*

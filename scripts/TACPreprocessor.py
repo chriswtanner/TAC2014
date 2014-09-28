@@ -10,8 +10,8 @@ def main():
 
     dataInputDir = baseDir + 'TAC_2014_BiomedSumm_Training_Data_V1.2/data/'
     dataOutputDir = baseDir + 'eval/'
-    malletOutput = dataOutputDir + "mallet-tac.txt"
-    annoOutput = dataOutputDir + "annoLegend.txt"
+    malletOutput = dataOutputDir + "mallet-tac_all.txt"
+    annoOutput = dataOutputDir + "annoLegend_all.txt"
 
     # tokens which will be ignored (case sensitive)
     badTokens = []
@@ -37,7 +37,7 @@ def main():
     annoDocs = []
     malletOut = open(malletOutput, 'w')
     annoOut = open(annoOutput, 'w')
-
+    fileID = ""
     # traverses dataDir to find docs and the annotations
     for root, dirnames, filenames in os.walk(dataInputDir):
         for filename in fnmatch.filter(filenames, '*.txt'):
@@ -56,7 +56,7 @@ def main():
     # NOTE: we ignore all info before the 'introduction', 'main text', and 'abstract' section titles
     for d in fullDocs:
         print "reading doc: " + d
-        matchObj = re.match(r'.*data/(.*)_TRAIN.*/(.*)', d, re.M|re.I)
+        matchObj = re.match(r'.*data/(.*)_.*/(.*)', d, re.M|re.I)
         if matchObj:
             fileID = matchObj.group(1) + "_" + matchObj.group(2)
         #fileID = d[d.rfind("/")+1:]
