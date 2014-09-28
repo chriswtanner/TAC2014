@@ -30,12 +30,12 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	
-	static boolean fullSet = false;
+	static boolean fullSet = true;
 	
 	static boolean runLDA = false;
-	static boolean evalSVM = true;
+	static boolean evalSVM = false;
 	static boolean writeSVM = false;
-	static String fileSuffix = "_nssp";
+	static String fileSuffix = ""; //"_v"; //NSDSP
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -63,6 +63,8 @@ public class TACEvaluator {
 	static String svmTesting = dataDir + "svm_test" + fileSuffix + ".txt";
 	static String svmPredictions = dataDir + "testing" + fileSuffix + ".predictions";
 	static String svmTruth = dataDir + "svm_truth" + fileSuffix + ".txt";
+	
+	static String annoOutputFile = dataDir + "annoPrediction.txt";
 	
 	static int negativeRatio = 5;
 	// LDA's input files
@@ -100,8 +102,8 @@ public class TACEvaluator {
 	
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
 		if (fullSet) {
-			annoInputFile = dataDir + "annoLegend-all.txt";
-			malletInputFile = dataDir + "mallet-tac-all.txt";
+			annoInputFile = dataDir + "annoLegend_all.txt";
+			malletInputFile = dataDir + "mallet-tac_all.txt";
 			testTopics = new ArrayList<String>();
 		}
 		
@@ -174,8 +176,9 @@ public class TACEvaluator {
 		if (writeSVM) {
 			writeSVMFiles(citances, sentencePredictions);
 		} else {
-			scorePredictions(sentencePredictions);
-			//List<Double> recall = scorePredictions(predictions);
+			
+			writePredictions(sentencePredictions);
+			//scorePredictions(sentencePredictions);
 		}
 		//List<Double> recall = scorePredictions(predictions);
 		/*
@@ -281,6 +284,62 @@ public class TACEvaluator {
 
 	}
 
+	private static void writePredictions(Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
+		
+		BufferedWriter bPredictions = new BufferedWriter(new FileWriter(annoOutputFile));
+		for (Citance c : sentencePredictions.keySet()) {
+			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
+				//continue; // TODO: DONT LEAVE THIS; BYRON
+			}
+			
+			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
+
+			
+			Document d = globalDocs.get(c.topicID + ":" + c.referenceDoc);
+			System.out.println("citance: " + c.topicID + ":" + c.citanceNum);
+			bPredictions.write("Topic ID: " + c.topicID + " | Citance Number: " + c.citanceNum);
+			
+			// options for Byron
+			bPredictions.write(" | Citation Text:");
+			for (String w : citanceTypes) {
+				if (allUsefulWords.contains(w)) {
+					bPredictions.write(" " + w);
+				}
+			}
+			
+			bPredictions.write(" | Reference Offset: [");
+			for (int i=0; i<3; i++) {
+				bPredictions.write(sentencePredictions.get(c).get(i).startPos + "-" +sentencePredictions.get(c).get(i).endPos + "'");
+				if (i < 2) {
+					bPredictions.write(", ");
+				} else {
+					bPredictions.write("]");
+				}
+			}
+			bPredictions.write(" | Reference Text: ");
+			for (int i=0; i<3; i++) {
+				
+				Set<String> refTypes = removeStopwordsAndBadWords(sentencePredictions.get(c).get(i).types);
+				
+				for (String w : refTypes) {
+					if (allUsefulWords.contains(w)) {
+						bPredictions.write(w + " ");
+					}
+				}
+				
+				/*
+				bPredictions.write(d.originalText.substring(sentencePredictions.get(c).get(i).startPos,sentencePredictions.get(c).get(i).endPos) + " ");
+				if (i < 2) {
+					bPredictions.write("... ");
+				}
+				*/
+			}
+			bPredictions.write("| Discourse Facet: | Run ID: BLLIP 1\n");
+			
+		}
+		
+	}
+
 	// we know the truth for these svm citances, so let's plot it
 	private static void evalSVM(Set<Citance> citances) throws IOException {
 		// reads the prediction file and truth file simultaneously
@@ -371,7 +430,8 @@ public class TACEvaluator {
 			
 
 			// training Citance
-			if (!testTopics.contains(c.topicID) || c.topicID.contains("EVAL")) {
+			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
+
 				//System.out.println("citance:" + c.topicID + " " + c.citingDoc + " " + c.referenceDoc + " " + c.citationText);
 				Set<Sentence> positives = new HashSet<Sentence>();
 				List<Sentence> negatives = new ArrayList<Sentence>();
@@ -414,7 +474,8 @@ public class TACEvaluator {
 			} else { // testing Citance
 				// and the truth file which helps us know which prediction is actually which citance and reference indexpair
 				//TOPIC:citancenum startindex-endindex 
-				//System.out.println("citance " + c.topicID + ":" + c.citanceNum + " has " + sentencePredictions.get(c).size() + " sents");
+				System.out.println("citance " + c.topicID + ":" + c.citanceNum + " has " + sentencePredictions.get(c).size() + " sents");
+
 				for (Sentence s : sentencePredictions.get(c)) {
 					
 					// writesthe truth part
@@ -1114,9 +1175,12 @@ public class TACEvaluator {
 		// (i.e., let 300 be the lengthiest doc; a 200-sentence doc will include its coverage % for sentences 201-300)
 		int maxLengthOfDoc = 0;
 		for (Citance c : predictions.keySet()) {
-			if (!testTopics.contains(c.topicID)) {
+			// we only care about testing docs; let's skip ones that aren't in the testing set
+			
+			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
 				continue;
 			}
+
 			
 			if (predictions.get(c).size() > maxLengthOfDoc) {
 				maxLengthOfDoc = predictions.get(c).size();
@@ -1125,7 +1189,7 @@ public class TACEvaluator {
 		
 		System.out.println("most sentences in any reference doc: " + maxLengthOfDoc);
 		for (Citance c : predictions.keySet()) {
-			if (!testTopics.contains(c.topicID)) {
+			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
 				continue;
 			}
 			//System.out.println("citance: " + c.citationText);
@@ -1138,7 +1202,7 @@ public class TACEvaluator {
 			double lastF1 = 0;
 			for (int i=0; i<maxLengthOfDoc; i++) {
 				
-				// look at the Citance's actual returned sentence
+				// compare to the Citance's actual returned sentence
 				if (i<predictions.get(c).size()) {
 					Sentence s = predictions.get(c).get(i);
 					IndexPair eachSentenceMarkers = new IndexPair(s.startPos, s.endPos);

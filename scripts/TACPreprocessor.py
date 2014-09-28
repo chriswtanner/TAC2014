@@ -10,8 +10,8 @@ def main():
 
     dataInputDir = baseDir + 'TAC_2014_BiomedSumm_Training_Data_V1.2/data/'
     dataOutputDir = baseDir + 'eval/'
-    malletOutput = dataOutputDir + "mallet-tac_all.txt"
-    annoOutput = dataOutputDir + "annoLegend_all.txt"
+    malletOutput = dataOutputDir + "mallet-tac_eval.txt"
+    annoOutput = dataOutputDir + "annoLegend_eval.txt"
 
     # tokens which will be ignored (case sensitive)
     badTokens = []
@@ -40,7 +40,7 @@ def main():
     fileID = ""
     # traverses dataDir to find docs and the annotations
     for root, dirnames, filenames in os.walk(dataInputDir):
-        for filename in fnmatch.filter(filenames, '*.txt'):
+        for filename in fnmatch.filter(filenames, '*EVAL*.txt'):
             p = str(os.path.join(root, filename))
             
             if ("Documents_Text" in p) and ("Summary" not in p):
