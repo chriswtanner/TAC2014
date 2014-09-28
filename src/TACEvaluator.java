@@ -33,9 +33,9 @@ public class TACEvaluator {
 	static boolean fullSet = false;
 	
 	static boolean runLDA = false;
-	static boolean evalSVM = false;
-	static boolean writeSVM = true;
-	static String fileSuffix = "_ns";
+	static boolean evalSVM = true;
+	static boolean writeSVM = false;
+	static String fileSuffix = "_nssp";
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -61,7 +61,7 @@ public class TACEvaluator {
 
 	static String svmTraining = dataDir + "svm_train" + fileSuffix + ".txt";
 	static String svmTesting = dataDir + "svm_test" + fileSuffix + ".txt";
-	static String svmPredictions = dataDir + "testing.predictions";
+	static String svmPredictions = dataDir + "testing" + fileSuffix + ".predictions";
 	static String svmTruth = dataDir + "svm_truth" + fileSuffix + ".txt";
 	
 	static int negativeRatio = 5;
@@ -168,13 +168,14 @@ public class TACEvaluator {
 		} else if (method.equals("longest")) {
 			//predictions = getLongestStringPredictions(referenceDocs, citances);
 		} else if (method.equals("perfect")) {
-			//predictions = getPerfectPredictions(referenceDocs, citances);
+			//predictions = getPerfectPredictions(citances);
 		}
 		
 		if (writeSVM) {
 			writeSVMFiles(citances, sentencePredictions);
 		} else {
 			scorePredictions(sentencePredictions);
+			//List<Double> recall = scorePredictions(predictions);
 		}
 		//List<Double> recall = scorePredictions(predictions);
 		/*
@@ -487,11 +488,13 @@ public class TACEvaluator {
 
 		}
 		
+		
 		if (forcedBit == -1) {
 			features.add((double)intersection);
 		} else {
 			features.add((double)0);
 		}
+		
 		
 		//System.out.println("cit:" + c.topicID + " " + c.citationText + " ref:" + c.referenceDoc);
 		//System.out.println("sent:" + s);
@@ -587,18 +590,18 @@ public class TACEvaluator {
 		
 		
 		if (forcedBit == -1) {
-			//features.add((double)bestNeighborPos);
-			features.add((double)s.sentence.length());
-			features.add((double)docPlacement);
-			features.add((double)Math.min(docPlacement, sectionPlacement));
-			features.add((double)Math.min(sectionPlacement, paragraphPlacement));
+			features.add((double)bestNeighborPos);
+			//features.add((double)s.sentence.length());
+			//features.add((double)docPlacement);
+			//features.add((double)Math.min(docPlacement, sectionPlacement));
+			//features.add((double)Math.min(sectionPlacement, paragraphPlacement));
 		} else {
 			double t = (double)(rand.nextInt((400-250)+1) + 250);
-			//features.add(t);
-			features.add((double)rand.nextInt((7-4)+1)+4);
-			features.add(t);
-			features.add((double)rand.nextInt((100 - 80)+1)+80);
-			features.add((double)rand.nextInt((60-20)+1) + 20);
+			features.add(t); // best neighbor pos
+			//features.add((double)rand.nextInt((6-4)+1)+4); // sentence length
+			//features.add(t); // doc placement
+			//features.add((double)rand.nextInt((100 - 80)+1)+80); // section placment
+			//features.add((double)rand.nextInt((60-20)+1) + 20); // paragrpah placment
 		}
 
 		
@@ -1583,7 +1586,7 @@ public class TACEvaluator {
 		return ret;
 	}
 	
-	private static Map<Citance, List<IndexPair>> getPerfectPredictions(Map<String, Document> docs, Set<Citance> citances) {
+	private static Map<Citance, List<IndexPair>> getPerfectPredictions(Set<Citance> citances) {
 		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
 		
 		for (Citance c : citances) {
@@ -1596,7 +1599,7 @@ public class TACEvaluator {
 			
 			//System.out.println("citance " + c.topicID + "_" + c.citanceNum + " has " + c.annotations.size() + " annotations");//citance types:" + citanceTypes);
 			// looks within the relevant reference doc (aka source doc)
-			Document d = docs.get(c.topicID + ":" + c.referenceDoc);
+			Document d = globalDocs.get(c.topicID + ":" + c.referenceDoc);
 			//System.out.println(c.referenceDoc);
 			//System.out.println(docs);
 			
@@ -1623,7 +1626,7 @@ public class TACEvaluator {
 			// which OTHER guys to eval against; so we'll just always say #1 was chosen)
 			Annotation perfect = c.annotations.get(0);
 			for (IndexPair ip : perfect.referenceOffsets) {
-				//sentenceMarkers.add(ip);  TODO: DONT LEAVE THIS COMMENTED OUT; it forces all choices to be random!
+				sentenceMarkers.add(ip); // TODO: DONT LEAVE THIS COMMENTED OUT; it forces all choices to be random!
 			}
 			
 			System.out.println("citance:" + c.citationText);
