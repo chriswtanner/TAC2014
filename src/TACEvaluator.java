@@ -35,7 +35,7 @@ public class TACEvaluator {
 	static boolean runLDA = false;
 	static boolean evalSVM = true;
 	static boolean writeSVM = false;
-	static String fileSuffix = "_iss3"; //"_iss2"; //"_v"; //NSDSP
+	static String fileSuffix = "_nss2lib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -71,7 +71,6 @@ public class TACEvaluator {
 	static String annoInputFile = dataDir + "annoLegend.txt";
 	static String malletInputFile = dataDir + "mallet-tac.txt";
 	static String stopwordsFile = dataDir + "stopwords.txt";
-
 
 	//static Set<String> referenceDocs = new HashSet<String>();
 	//static Map<String, Document> referenceDocs = new HashMap<String, Document>(); // stores just the reference docs
@@ -115,6 +114,7 @@ public class TACEvaluator {
 		makeMalletFileAndGetBadWords(malletInputFile);
 		wordWeights = getWordWeights(wordWeightingScheme, ldaObject);
 		
+		System.out.println("global docs:" + globalDocs.keySet().size());
 		//System.exit(1);
 		// create Documents (currently just each Source gets made into a Document, not the reports that cite it)
 		//referenceDocs = loadReferenceDocuments(annoInputFile);
@@ -296,7 +296,7 @@ public class TACEvaluator {
 		int in=0;
 		for (Citance c : sentencePredictions.keySet()) {
 			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
-				//continue; // TODO: DONT LEAVE THIS; BYRON
+				continue; // TODO: DONT LEAVE THIS; BYRON
 			}
 			
 			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
@@ -419,13 +419,7 @@ public class TACEvaluator {
 	private static void writeSVMFiles(Set<Citance> citances, Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
 		
 		allUsefulWords.clear();
-		/*
-		for (String w : globalCitanceTypes) {
-			if (globalReferenceTypes.contains(w)) {
-				allUsefulWords.add(w);
-			}
-		}
-		*/
+
 		for (String w : globalIntersectionTypes) {
 			allUsefulWords.add(w);
 		}
@@ -524,13 +518,14 @@ public class TACEvaluator {
 		
 		Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
 		Set<String> curReferenceTypes = removeStopwordsAndBadWords(s.types);
+		
 		int intersection = 0;
 		
 		for (String token : curReferenceTypes) {
 			if (citanceTypes.contains(token)) {
-				if (wordWeights.containsKey(token)) {
+				//if (wordWeights.containsKey(token)) {
 					intersection += 1;
-				}
+				//}
 			}
 		}
 		
@@ -557,13 +552,13 @@ public class TACEvaluator {
 
 		}
 		
-		/*
+		
 		if (forcedBit == -1) {
 			features.add((double)intersection);
 		} else {
 			features.add((double)0);
 		}
-		*/
+		
 		
 		//System.out.println("cit:" + c.topicID + " " + c.citationText + " ref:" + c.referenceDoc);
 		//System.out.println("sent:" + s);
@@ -593,8 +588,6 @@ public class TACEvaluator {
 			}
 		}
 		
-
-
 		
 		// placement within doc
 		int docPlacement = document.sentences.size();
@@ -659,14 +652,14 @@ public class TACEvaluator {
 		
 		
 		if (forcedBit == -1) {
-			features.add((double)bestNeighborPos);
+			//features.add((double)bestNeighborPos);
 			features.add((double)s.sentence.length());
 			features.add((double)docPlacement);
 			//features.add((double)Math.min(docPlacement, sectionPlacement));
 			features.add((double)Math.min(sectionPlacement, paragraphPlacement));
 		} else {
 			double t = (double)(rand.nextInt((400-250)+1) + 250);
-			features.add(t); // best neighbor pos
+			//features.add(t); // best neighbor pos
 			features.add((double)rand.nextInt((6-4)+1)+4); // sentence length
 			features.add(t); // doc placement
 			//features.add((double)rand.nextInt((100 - 80)+1)+80); // section placment
@@ -1174,6 +1167,47 @@ public class TACEvaluator {
 	
 	// every Citance-Annotator pair gets evaluated and averaged in our recall-type graph
 	private static List<Double> scorePredictions(Map<Citance, List<Sentence>> predictions) throws IOException {
+		Map<Citance, List<IndexPair>> citanceToPairs = new HashMap<Citance, List<IndexPair>>();
+		
+		for (Citance c : predictions.keySet()) {
+			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
+				continue;
+			}
+			
+			List<IndexPair> tmp = new ArrayList<IndexPair>();
+			for (int i=0; i<10; i++) {
+				Sentence s = predictions.get(c).get(i);
+				IndexPair ip = new IndexPair(s.startPos, s.endPos);
+				tmp.add(ip);
+			}
+			boolean madeMerge = true;
+			
+			while (madeMerge) {
+				madeMerge = false;
+				for (int i=0; i<tmp.size() && !madeMerge; i++) {
+					IndexPair ip2 = tmp.get(i);
+					
+					for (int j=0; j<3 && !madeMerge; j++) {
+						IndexPair ip = tmp.get(j);
+						if (ip2.endPos > (ip.startPos -5) && ip2.endPos < ip.startPos) {
+							IndexPair ipnew = new IndexPair(ip2.startPos, ip.endPos);
+							tmp.remove(j);
+							System.out.println("we just merged " + ip + " and " + ip2);
+							tmp.add(ipnew);
+							madeMerge = true;
+						} else if (ip2.startPos < (ip.endPos + 5) && ip2.startPos > ip.endPos) {
+							IndexPair ipnew = new IndexPair(ip.startPos, ip2.endPos);
+							System.out.println("we just merged " + ip + " and " + ip2);
+							tmp.remove(j);
+							tmp.add(ipnew);
+							madeMerge = true;
+						}
+					}
+				}
+			}
+			citanceToPairs.put(c, tmp);
+		}
+		
 		List<Double> f1 = new ArrayList<Double>();
 		Map<Integer, List<Double>> f1Sums = new HashMap<Integer, List<Double>>();
 		BufferedWriter bout = new BufferedWriter(new FileWriter(resultsOut));
@@ -1257,7 +1291,6 @@ public class TACEvaluator {
 					double weightedF1 = d.calculateWeightedF1(annos);
 					lastF1 = weightedF1;
 				}
-				
 				
 				List<Double> tmp = new ArrayList<Double>();
 				if (f1Sums.containsKey(i)) {
@@ -1899,6 +1932,7 @@ public class TACEvaluator {
 		return ret;
 	}
 	
+	/*
 	private static Map<Citance, List<IndexPair>> getJaccardCitanceWeightedPredictions(Map<String, Document> docs, Set<Citance> citances, String ldaObject) throws FileNotFoundException, IOException, ClassNotFoundException {
 		
 		Map<Citance, List<IndexPair>> ret = new HashMap<Citance, List<IndexPair>>();
@@ -2023,12 +2057,7 @@ public class TACEvaluator {
 				Sentence s = (Sentence)it.next();
 				IndexPair i = new IndexPair(s.startPos, s.endPos);
 				sentenceMarkers.add(i);
-				
-				/*
-				if (tmp < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
-					//System.out.println("we have:" + sentenceScores.get(s) + " = " + s.sentence);
-				}
-				*/
+
 				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
 				tmp++;
 			}
@@ -2039,7 +2068,7 @@ public class TACEvaluator {
 		}
 		return ret;
 	}
-	
+	*/
 	private static Map<Citance, List<Sentence>> getJaccardWeightedPredictions(Set<Citance> citances, String ldaObject) throws FileNotFoundException, IOException, ClassNotFoundException {
 		
 		// displays wordWeights
@@ -2146,10 +2175,10 @@ public class TACEvaluator {
 				int intersection = 0;
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
-						if (wordWeights.containsKey(token)) {
+						//if (wordWeights.containsKey(token)) {
 							intersection += 1;
 							globalIntersectionTypes.add(token);
-						}
+						//}
 					}
 				}
 				triSentenceScores.put(i, (double)intersection);
@@ -2202,10 +2231,10 @@ public class TACEvaluator {
 				int intersection = 0;
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
-						//if (wordWeights.containsKey(token)) {
+						if (wordWeights.containsKey(token)) {
 							intersection += 1; //(wordWeights.get(token));
 							//System.out.println(token + " adds " + wordWeights.get(token));
-						//}
+						}
 					}
 				}
 				
@@ -2337,6 +2366,7 @@ public class TACEvaluator {
 	
 	// works w/ the raw sentence (stopwords and 'bad' words included)
 	// we will try jaccard sliding window and BLEU attempts here
+	/*
 	private static Map<Citance, List<IndexPair>> getRawPredictions(Map<String, Document> docs, Set<Citance> citances) {
 		
 		// displays wordWeights
@@ -2437,11 +2467,7 @@ public class TACEvaluator {
 				IndexPair i = new IndexPair(s.startPos, s.endPos);
 				sentenceMarkers.add(i);
 				
-				/*
-				if (tmp < 10 && c.citationText.startsWith("In a recent issue of Cell, the Downward laboratory  went all the way from identifying GATA2 as a novel synthetic lethal gene to validating it using Kras-driven GEM models and, finally,")) {
-					//System.out.println("we have:" + sentenceScores.get(s) + " = " + s.sentence);
-				}
-				*/
+
 				//System.out.println("score:" + sentenceScores.get(s) + ": " + s.sentence);
 				tmp++;
 			}
@@ -2453,6 +2479,7 @@ public class TACEvaluator {
 		}
 		return ret;
 	}
+	*/
 	
 	@SuppressWarnings("unchecked")
 	static Map sortByValueDescending(Map map) {
