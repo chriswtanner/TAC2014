@@ -10,6 +10,7 @@ public class Citance {
 	String referenceDoc = "";
 	String citingDoc = "";
 	String citationText = ""; // we try to remove all text within ( ) because it usually contains author info
+	String discourse = "";
 	List<Annotation> annotations = new ArrayList<Annotation>();
 	
 	public Citance(String topic, int citNum, String ref, String citingDoc, String text) {
@@ -58,5 +59,10 @@ public class Citance {
 	
 	public void addAnnotation(Annotation a) {
 		annotations.add(a);
+	}
+
+	public void addDiscourse(String d) {
+		this.discourse = d;
+		
 	}
 }

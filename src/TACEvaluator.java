@@ -30,12 +30,14 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	
-	static boolean fullSet = false;
+	static boolean fullSet = true;
 	
 	static boolean runLDA = false;
-	static boolean evalSVM = true;
+	static boolean evalSVM = false;
 	static boolean writeSVM = false;
-	static String fileSuffix = "_nss2lib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
+	static boolean loadDiscourse = false; // true means use the ones listed in the no_ref byron file
+	
+	static String fileSuffix = ""; //"_goldlib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -59,6 +61,8 @@ public class TACEvaluator {
 	static String resultsOut = dataDir + "results.csv";
 	static String statsOut = dataDir + "stats.csv";
 
+	static String predAnnos = dataDir + "predAnnos.txt"; // from byron
+	
 	static String svmTraining = dataDir + "svm_train" + fileSuffix + ".txt";
 	static String svmTesting = dataDir + "svm_test" + fileSuffix + ".txt";
 	static String svmPredictions = dataDir + "testing" + fileSuffix + ".predictions";
@@ -77,7 +81,7 @@ public class TACEvaluator {
 	static Map<String, Document> globalDocs = new HashMap<String, Document>(); // stores both the reference and citance docs
 	
 	// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
-	static String ldaObject = dataDir + "lda_50z_2000i.ser";
+	static String ldaObject = dataDir + "lda_50z_2000i.ser"; //"lda_60z_3000i.ser";
 	
 	static Set<String> badWords = new HashSet<String>();
 	static Map<String, Double> wordWeights = new HashMap<String, Double>();
@@ -107,7 +111,28 @@ public class TACEvaluator {
 		}
 		
 		Set<Citance> citances = loadCitances(annoInputFile);
+		
+		if (fullSet) {
+			addDiscourse(citances);
+		}
+		
+		// NOTE: LDA variables/params are in the LDA's class as global vars
+		if (runLDA) {
+			LDA l = new LDA(malletInputFile, stopwordsFile);
+			l.runLDA();
+			l.saveLDA(ldaObject);
+		}
+		
 		System.out.println("*** loaded " + citances.size() + " initial citances");
+		int x =0;
+		for (Citance c : citances) {
+			if (c.topicID.contains("_EVAL")) {
+				x++;
+				//System.out.println("discourse for " + c + " = " + c.discourse);
+			}
+		}
+		System.out.println("citances w/ disc:" + x);
+		//System.exit(1);
 		
 		stopwords = loadStopwords(stopwordsFile);
 		
@@ -138,13 +163,6 @@ public class TACEvaluator {
 			//System.out.println(s + " " + sectionCounts.get(s));
 		}
 		//System.exit(1);
-		
-		// NOTE: LDA variables/params are in the LDA's class as global vars
-		if (runLDA) {
-			LDA l = new LDA(malletInputFile, stopwordsFile);
-			l.runLDA();
-			l.saveLDA(ldaObject);
-		}
 		
 		if (evalSVM) {	
 			evalSVM(citances);
@@ -179,8 +197,8 @@ public class TACEvaluator {
 			writeSVMFiles(citances, sentencePredictions);
 		} else {
 			
-			//writePredictions(sentencePredictions);
-			scorePredictions(sentencePredictions);
+			writePredictions(sentencePredictions);
+			//scorePredictions(sentencePredictions);
 		}
 		//List<Double> recall = scorePredictions(predictions);
 		/*
@@ -286,6 +304,63 @@ public class TACEvaluator {
 
 	}
 
+	private static void addDiscourse(Set<Citance> citances) throws IOException {
+		
+		BufferedReader bin = new BufferedReader(new FileReader(predAnnos));
+		String curLine = "";
+		int x = 0;
+		// reads each line of annoInputFile, while looking for 'topicID' and 'reference article' fields,
+		// in order to know the proper location of the file for which we wish to create a Document
+		while ((curLine = bin.readLine())!=null) {
+			if (curLine.trim().equals("")) {
+				continue;
+			}
+			StringTokenizer st = new StringTokenizer(curLine, "|");
+			String topicID = "";
+			int citanceNum = 0;
+			x++;
+			String discourse = "";
+			while (st.hasMoreTokens()) {
+
+				String field = st.nextToken().trim();
+				//System.out.println("t:" + field);
+				if (field.toLowerCase().startsWith("topic id:")) {
+					String[] tokens = field.split(" ");
+					topicID = tokens[2];
+				} else if (field.toLowerCase().startsWith("citance number")) {
+					StringTokenizer st2 = new StringTokenizer(field);
+					st2.nextToken();
+					st2.nextToken();
+					citanceNum = Integer.parseInt(st2.nextToken());
+				} else if (field.toLowerCase().startsWith("discourse facet:")) {
+					StringTokenizer st2 = new StringTokenizer(field);
+					st2.nextToken();
+					st2.nextToken();
+					discourse = st2.nextToken();
+				}
+			}
+			
+			if (discourse.equals("")) {
+				System.err.println("discourse not found in Byron's file!" + curLine);
+				System.exit(1);
+			} else {
+				// find teh Citance
+				boolean foundC = false;
+				for (Citance c : citances) {
+					if (c.topicID.equals(topicID) && c.citanceNum == citanceNum) {
+						c.addDiscourse(discourse);
+						foundC = true;
+					}
+				}
+				if (!foundC) {
+					System.err.println("couldnt find created Citance for " + topicID + " " + citanceNum);
+					System.exit(1);
+				}
+			}
+		}
+		System.out.println("# lines: " + x);
+	}
+
 	private static void writePredictions(Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
 		
 		for (String w : globalIntersectionTypes) {
@@ -300,7 +375,6 @@ public class TACEvaluator {
 			}
 			
 			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
-
 			
 			Document d = globalDocs.get(c.topicID + ":" + c.referenceDoc);
 			System.out.println("citance: " + c.topicID + ":" + c.citanceNum);
@@ -316,6 +390,61 @@ public class TACEvaluator {
 				}
 			}
 			*/
+			
+			List<IndexPair> newOnes = new ArrayList<IndexPair>();
+			
+			
+			for (int i=0; i<3; i++) {
+				int startPos = sentencePredictions.get(c).get(i).startPos;
+				int endPos = sentencePredictions.get(c).get(i).endPos;
+				IndexPair ip = new IndexPair(startPos, endPos);
+				newOnes.add(ip);
+			}
+			
+			/*
+			boolean merged = true;
+			while (merged) {
+				merged = false;
+				for (int i=1; i<newOnes.size() && !merged; i++) {
+					IndexPair later = newOnes.get(i);
+					
+					// look at the previous locations
+					for (int j=0; j<i && !merged; j++) {
+						IndexPair earlier = newOnes.get(j);
+						if (later.endPos > (earlier.startPos-3) && later.endPos <= earlier.startPos) {
+							IndexPair ipnew = new IndexPair(later.startPos, earlier.endPos);
+							System.out.println("size was: " + newOnes.size());
+							newOnes.remove(i);
+							newOnes.remove(j);
+							System.out.println("(" + i + " <-> " + j + ") we just merged " + earlier + " and " + later);
+							newOnes.add(j, ipnew);
+							System.out.println("size now: " + newOnes.size());
+							merged = true;
+						} else if (later.startPos < (earlier.endPos + 3) && later.startPos >= earlier.endPos) {
+							IndexPair ipnew = new IndexPair(earlier.startPos, later.endPos);
+							System.out.println("(" + i + " <-> " + j + ") we just merged " + earlier + " and " + later);
+							newOnes.remove(j);
+							newOnes.add(ipnew);
+							merged = true;
+						}
+					}
+				}
+			}
+			*/
+			
+			bPredictions.write(" | Reference Offset: [");
+			for (int i=0; i<Math.min(3, newOnes.size()); i++) {
+				
+				IndexPair ip = newOnes.get(i);
+				
+				bPredictions.write(ip.startPos + "-" + ip.endPos + "'");
+				if (i < 2) {
+					bPredictions.write(", ");
+				} else {
+					bPredictions.write("]");
+				}
+			}
+			/*
 			bPredictions.write(" | Reference Offset: [");
 			for (int i=0; i<3; i++) {
 				bPredictions.write(sentencePredictions.get(c).get(i).startPos + "-" +sentencePredictions.get(c).get(i).endPos + "'");
@@ -325,11 +454,12 @@ public class TACEvaluator {
 					bPredictions.write("]");
 				}
 			}
+			*/
 			bPredictions.write(" | Reference Text: ");
-			for (int i=0; i<3; i++) {
+			for (int i=0; i<Math.min(3, newOnes.size()); i++) {
 				
 				Set<String> refTypes = removeStopwordsAndBadWords(sentencePredictions.get(c).get(i).types);
-				
+				IndexPair ip = newOnes.get(i);
 				/*
 				for (String w : refTypes) {
 					if (allUsefulWords.contains(w.toLowerCase())) {
@@ -337,15 +467,23 @@ public class TACEvaluator {
 					}
 				}
 				*/
-				
+				bPredictions.write(d.originalText.substring(ip.startPos,ip.endPos) + " ");
+				if (i < 2) {
+					bPredictions.write("... ");
+				}
+				/*
 				bPredictions.write(d.originalText.substring(sentencePredictions.get(c).get(i).startPos,sentencePredictions.get(c).get(i).endPos) + " ");
 				if (i < 2) {
 					bPredictions.write("... ");
 				}
-				
+				*/
 			}
-			bPredictions.write("| Discourse Facet: | Run ID: BLLIP 1\n");
-			
+			bPredictions.write("| Discourse Facet:");
+			if (loadDiscourse) {
+				bPredictions.write(" " + c.discourse);
+			}
+			bPredictions.write(" | Run ID: BLLIP 3 |\n");
+
 		}
 		bPredictions.close();
 		System.out.println("completed " + in + " citances");
@@ -523,9 +661,9 @@ public class TACEvaluator {
 		
 		for (String token : curReferenceTypes) {
 			if (citanceTypes.contains(token)) {
-				//if (wordWeights.containsKey(token)) {
+				if (wordWeights.containsKey(token)) {
 					intersection += 1;
-				//}
+				}
 			}
 		}
 		
@@ -1174,14 +1312,42 @@ public class TACEvaluator {
 				continue;
 			}
 			
-			List<IndexPair> tmp = new ArrayList<IndexPair>();
-			for (int i=0; i<10; i++) {
+			List<IndexPair> newOnes = new ArrayList<IndexPair>();
+			for (int i=0; i<5; i++) {
 				Sentence s = predictions.get(c).get(i);
 				IndexPair ip = new IndexPair(s.startPos, s.endPos);
-				tmp.add(ip);
+				newOnes.add(ip);
 			}
-			boolean madeMerge = true;
 			
+			boolean merged = true;
+			while (merged) {
+				merged = false;
+				for (int i=1; i<newOnes.size() && !merged; i++) {
+					IndexPair later = newOnes.get(i);
+					
+					// look at the previous locations
+					for (int j=0; j<i && !merged; j++) {
+						IndexPair earlier = newOnes.get(j);
+						if (later.endPos > (earlier.startPos-3) && later.endPos <= earlier.startPos) {
+							IndexPair ipnew = new IndexPair(later.startPos, earlier.endPos);
+							System.out.println("size was: " + newOnes.size());
+							newOnes.remove(i);
+							newOnes.remove(j);
+							System.out.println("(" + i + " <-> " + j + ") we just merged " + earlier + " and " + later);
+							newOnes.add(j, ipnew);
+							System.out.println("size now: " + newOnes.size());
+							merged = true;
+						} else if (later.startPos < (earlier.endPos + 3) && later.startPos >= earlier.endPos) {
+							IndexPair ipnew = new IndexPair(earlier.startPos, later.endPos);
+							System.out.println("(" + i + " <-> " + j + ") we just merged " + earlier + " and " + later);
+							newOnes.remove(j);
+							newOnes.add(ipnew);
+							merged = true;
+						}
+					}
+				}
+			}
+			/*
 			while (madeMerge) {
 				madeMerge = false;
 				for (int i=0; i<tmp.size() && !madeMerge; i++) {
@@ -1205,7 +1371,8 @@ public class TACEvaluator {
 					}
 				}
 			}
-			citanceToPairs.put(c, tmp);
+			*/
+			citanceToPairs.put(c, newOnes);
 		}
 		
 		List<Double> f1 = new ArrayList<Double>();
