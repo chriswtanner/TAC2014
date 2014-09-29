@@ -37,7 +37,7 @@ public class TACEvaluator {
 	static boolean writeSVM = false;
 	static boolean loadDiscourse = false; // true means use the ones listed in the no_ref byron file
 	
-	static String fileSuffix = ""; //"_goldlib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
+	static String fileSuffix = "_eval2"; //"_goldlib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -70,7 +70,7 @@ public class TACEvaluator {
 	
 	static String annoOutputFile = dataDir + "annoPrediction.txt";
 	
-	static int negativeRatio = 5;
+	static int negativeRatio = 10;
 	// LDA's input files
 	static String annoInputFile = dataDir + "annoLegend.txt";
 	static String malletInputFile = dataDir + "mallet-tac.txt";
@@ -81,7 +81,7 @@ public class TACEvaluator {
 	static Map<String, Document> globalDocs = new HashMap<String, Document>(); // stores both the reference and citance docs
 	
 	// LDA's output/saved object which will be written to if 'runLDA = true'; otherwise, it can be read from
-	static String ldaObject = dataDir + "lda_50z_2000i.ser"; //"lda_60z_3000i.ser";
+	static String ldaObject = dataDir + "lda_60z_3000i.ser";
 	
 	static Set<String> badWords = new HashSet<String>();
 	static Map<String, Double> wordWeights = new HashMap<String, Double>();
@@ -104,6 +104,20 @@ public class TACEvaluator {
 			"background", "supplementary material", "statistical", "methods", "conclusion", "highlights", "keywords")); 
 	
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
+		
+		/*
+		Set<String> uid1 = getAnnoUIDs(dataDir + "BLLIP4.txt");
+		Set<String> uid2 = getAnnoUIDs(dataDir + "BLLIPN.txt");
+		System.out.println(uid1.size() + " " + uid2.size());
+		for (String u : uid2) {
+			if (!uid1.contains(u)) {
+				System.out.println("N doesnt have " + u);
+			}
+		}
+		*/
+		cleanUpAnno(1, dataDir + "BLLIP1b.txt", dataDir + "BLLIP1.txt");
+		System.exit(1);
+		
 		if (fullSet) {
 			annoInputFile = dataDir + "annoLegend_all.txt";
 			malletInputFile = dataDir + "mallet-tac_all.txt";
@@ -165,7 +179,8 @@ public class TACEvaluator {
 		//System.exit(1);
 		
 		if (evalSVM) {	
-			evalSVM(citances);
+			//evalSVM(citances);
+			writeSVMPredictions(citances);
 			return;
 		}
 		
@@ -197,8 +212,8 @@ public class TACEvaluator {
 			writeSVMFiles(citances, sentencePredictions);
 		} else {
 			
-			writePredictions(sentencePredictions);
-			//scorePredictions(sentencePredictions);
+			//writePredictions(sentencePredictions);
+			scorePredictions(sentencePredictions);
 		}
 		//List<Double> recall = scorePredictions(predictions);
 		/*
@@ -304,6 +319,135 @@ public class TACEvaluator {
 
 	}
 
+	private static Set<String> getAnnoUIDs(String input) throws IOException {
+
+		BufferedReader bin = new BufferedReader(new FileReader(input));
+		String curLine = "";
+
+		Set<String> seen = new HashSet<String>();
+		while ((curLine = bin.readLine())!=null) {
+			if (curLine.trim().equals("") || !curLine.contains("_EVAL")) {
+				continue;
+			}
+			StringTokenizer st = new StringTokenizer(curLine, "|");
+			String topicID = "";
+			int citanceNum = 0;
+			String referenceDoc = "";
+			String citingDoc = "";
+			String citationText = ""; // we try to remove all text within ( ) because it usually contains author info
+			
+			List<String> refOffsets = new ArrayList<String>();
+			String refText = "";
+			String discourse = "";
+			String annotator = "";
+			while (st.hasMoreTokens()) {
+
+				String field = st.nextToken().trim();
+				//System.out.println("t:" + field);
+				if (field.toLowerCase().startsWith("topic id:")) {
+					String[] tokens = field.split(" ");
+					topicID = tokens[2];
+				} else if (field.toLowerCase().startsWith("citance number")) {
+					StringTokenizer st2 = new StringTokenizer(field);
+					st2.nextToken();
+					st2.nextToken();
+					citanceNum = Integer.parseInt(st2.nextToken());
+				}
+			}
+			
+			String uid = topicID + ":"+ citanceNum;
+			if (seen.contains(uid)) {
+				System.err.println("we already saw " + uid);
+			} else {
+				seen.add(uid);
+			}
+
+		}
+		return seen;
+	}
+
+	private static void cleanUpAnno(int num, String input, String output) throws IOException {
+		
+
+		BufferedReader bin = new BufferedReader(new FileReader(input));
+		BufferedWriter bout = new BufferedWriter(new FileWriter(output));
+		String curLine = "";
+		int in = 0;
+		// reads each line of annoInputFile, while looking for 'topicID' and 'reference article' fields,
+		// in order to know the proper location of the file for which we wish to create a Document
+		Set<String> seen = new HashSet<String>();
+		while ((curLine = bin.readLine())!=null) {
+			if (curLine.trim().equals("") || !curLine.contains("_EVAL")) {
+				continue;
+			}
+			StringTokenizer st = new StringTokenizer(curLine, "|");
+			//System.out.println("line: " + curLine);
+			String topicID = "";
+			int citanceNum = 0;
+			String referenceDoc = "";
+			String citingDoc = "";
+			String citationText = ""; // we try to remove all text within ( ) because it usually contains author info
+			
+			List<String> refOffsets = new ArrayList<String>();
+			String refText = "";
+			String discourse = "";
+			String annotator = "";
+			while (st.hasMoreTokens()) {
+
+				String field = st.nextToken().trim();
+				System.out.println("t:" + field);
+				if (field.toLowerCase().startsWith("topic id:")) {
+					String[] tokens = field.split(" ");
+					topicID = tokens[2];
+				} else if (field.toLowerCase().startsWith("citance number")) {
+					StringTokenizer st2 = new StringTokenizer(field);
+					st2.nextToken();
+					st2.nextToken();
+					citanceNum = Integer.parseInt(st2.nextToken());
+				} else if (field.toLowerCase().startsWith("reference offset:")) {
+					String right = field.substring(18);
+					StringTokenizer st2 = new StringTokenizer(right, "[', ]");
+					
+					while (st2.hasMoreTokens()) {
+						String ro = st2.nextToken();
+						//System.out.println("ro:" + ro);
+						refOffsets.add(ro);
+					}
+				} else if (field.toLowerCase().startsWith("reference text:")) {
+					refText = field.substring(15).trim();
+					//System.out.println("reftext:" + refText);
+				} else if (field.toLowerCase().startsWith("discourse facet:")) {
+					StringTokenizer st2 = new StringTokenizer(field);
+					st2.nextToken();
+					st2.nextToken();
+					discourse = st2.nextToken().trim();
+				}
+			}
+			
+			String uid = topicID + ":"+ citanceNum;
+			if (!seen.contains(uid)) {
+				bout.write("Topic ID: " + topicID + " | Citance Number: " + citanceNum);
+				bout.write(" | Reference Offset: [");
+				for (int i=0; i<refOffsets.size(); i++) {
+					
+					if (i < refOffsets.size()-1) {
+						bout.write(refOffsets.get(i) + ", ");
+					} else {
+						bout.write(refOffsets.get(i) + "]");
+					}
+				}
+				bout.write(" | Reference Text: " + refText);
+				bout.write(" | Discourse Facet: " + discourse);
+				bout.write(" | Run ID: BLLIP " + num + " |\n");
+				in++;
+				seen.add(uid);
+			}
+			
+		}
+		bout.close();
+		System.out.println("completed " + in + " citances");
+	}
+
 	private static void addDiscourse(Set<Citance> citances) throws IOException {
 		
 		BufferedReader bin = new BufferedReader(new FileReader(predAnnos));
@@ -371,7 +515,7 @@ public class TACEvaluator {
 		int in=0;
 		for (Citance c : sentencePredictions.keySet()) {
 			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
-				continue; // TODO: DONT LEAVE THIS; BYRON
+				//continue; // TODO: DONT LEAVE THIS; BYRON
 			}
 			
 			Set<String> citanceTypes = removeStopwordsAndBadWords(c.getTextTokensAsSet());
@@ -553,7 +697,134 @@ public class TACEvaluator {
 		scorePredictions(predictions);
 	}
 
+	private static void writeSVMPredictions(Set<Citance> citances) throws IOException {
+		
+		// reads the prediction file and truth file simultaneously
+		BufferedReader bPredictions = new BufferedReader(new FileReader(svmPredictions));
+		BufferedReader bTruth = new BufferedReader(new FileReader(svmTruth));
+		bPredictions.readLine(); // skips over header
+		System.out.println("reading " + svmPredictions);
+		String curLine = "";
+		Map<Citance, HashMap<Sentence, Double>> citancePredictions = new HashMap<Citance, HashMap<Sentence, Double>>();
+		
+		while ((curLine = bPredictions.readLine())!=null) {
+			// prob for the given Citance
+			StringTokenizer st = new StringTokenizer(curLine);
+			st.nextToken();
+			double prob = Double.parseDouble(st.nextToken());
+			
+			curLine = bTruth.readLine();
+			st = new StringTokenizer(curLine);
+			String first = st.nextToken();
+			String second = st.nextToken();
+			String topicID = first.split(":")[0];
+			int citanceNum = Integer.parseInt(first.split(":")[1]);
+			int startPos = Integer.parseInt(second.split("-")[0]);
+			int endPos = Integer.parseInt(second.split("-")[1]);
+			
+			// finds the citance
+			Citance c = null;
+			for (Citance c1 : citances) {
+				if (c1.topicID.equals(topicID) & c1.citanceNum == citanceNum) {
+					c = c1;
+					break;
+				}
+			}
+			if (c == null) {
+				System.err.println("couldnt find the Citance!!");
+				System.exit(1);
+			}
+			
+			HashMap<Sentence, Double> curProbs = new HashMap<Sentence, Double>();
+			if (citancePredictions.containsKey(c)) {
+				curProbs = citancePredictions.get(c);				
+			}
+			Sentence s = new Sentence(startPos, endPos, "");
+			//IndexPair i = new IndexPair(startPos, endPos);
+			curProbs.put(s, prob);
+			citancePredictions.put(c, curProbs);
+		}
+		
+		// turns intno a ranked list
+		Map<Citance, List<Sentence>> predictions = new HashMap<Citance, List<Sentence>>();
+		for (Citance c : citancePredictions.keySet()) {
+			
+			List<Sentence> rankedList = new ArrayList<Sentence>();
+			Iterator it = sortByValueDescending(citancePredictions.get(c)).keySet().iterator();
+			while (it.hasNext()) {
+				Sentence s = (Sentence)it.next(); //new IndexPair(s.startPos, s.endPos);
+				rankedList.add(s);
+			}
+			predictions.put(c, rankedList);
+		}
+		
+		bPredictions.close();
+		bTruth.close();
 
+		int in=0;
+		BufferedWriter bout = new BufferedWriter(new FileWriter(annoOutputFile));
+		for (Citance c : citancePredictions.keySet()) {
+			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
+				//continue; // TODO: DONT LEAVE THIS; BYRON
+			}
+			Document d = globalDocs.get(c.topicID + ":" + c.referenceDoc);
+			
+			System.out.println("citance: " + c.topicID + ":" + c.citanceNum);
+			bout.write("Topic ID: " + c.topicID + " | Citance Number: " + c.citanceNum);
+			in++;
+			// options for Byron
+			bout.write(" | Citation Text:");
+			bout.write(" " + c.citationText);
+			
+			List<IndexPair> newOnes = new ArrayList<IndexPair>();
+			
+			
+			for (int i=0; i<3; i++) {
+				int startPos = predictions.get(c).get(i).startPos;
+				int endPos = predictions.get(c).get(i).endPos;
+				IndexPair ip = new IndexPair(startPos, endPos);
+				newOnes.add(ip);
+			}
+			
+			bout.write(" | Reference Offset: [");
+			for (int i=0; i<Math.min(3, newOnes.size()); i++) {
+				
+				IndexPair ip = newOnes.get(i);
+				
+				bout.write(ip.startPos + "-" + ip.endPos + "'");
+				if (i < 2) {
+					bout.write(", ");
+				} else {
+					bout.write("]");
+				}
+			}
+			bout.write(" | Reference Text: ");
+			for (int i=0; i<Math.min(3, newOnes.size()); i++) {
+				
+				IndexPair ip = newOnes.get(i);
+
+				bout.write(d.originalText.substring(ip.startPos,ip.endPos) + " ");
+				if (i < 2) {
+					bout.write("... ");
+				}
+				/*
+				bPredictions.write(d.originalText.substring(sentencePredictions.get(c).get(i).startPos,sentencePredictions.get(c).get(i).endPos) + " ");
+				if (i < 2) {
+					bPredictions.write("... ");
+				}
+				*/
+			}
+			bout.write("| Discourse Facet:");
+			if (loadDiscourse) {
+				bout.write(" " + c.discourse);
+			}
+			bout.write(" | Run ID: BLLIP 5 |\n");
+
+		}
+		bout.close();
+		System.out.println("completed " + in + " citances");
+	}
+	
 	private static void writeSVMFiles(Set<Citance> citances, Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
 		
 		allUsefulWords.clear();
@@ -616,7 +887,7 @@ public class TACEvaluator {
 			} else { // testing Citance
 				// and the truth file which helps us know which prediction is actually which citance and reference indexpair
 				//TOPIC:citancenum startindex-endindex 
-				System.out.println("citance " + c.topicID + ":" + c.citanceNum + " has " + sentencePredictions.get(c).size() + " sents");
+				System.out.println("test citance " + c.topicID + ":" + c.citanceNum + " has " + sentencePredictions.get(c).size() + " sents");
 
 				for (Sentence s : sentencePredictions.get(c)) {
 					
