@@ -1,3 +1,22 @@
+'''
+Code for the biomed summarization shared task (only task 1). Requires sklearn and numpy.
+
+To run CV (and assess different methods), use:
+
+> biomedsumm.cv_unique_citances()
+
+This will report averages. To generate test predictions:
+
+> biomedsumm.make_test_predictions()
+
+This will dump a file with the predictions.
+
+Both methods take the include_reference_text flag; if true,
+you may also use the include_predicted_reference_texts, which 
+uses the predicted reference texts (obviously).
+
+'''
+
 import pdb 
 import itertools
 import os
