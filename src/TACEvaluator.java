@@ -30,12 +30,12 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	
-	static boolean fullSet = true;
+	static boolean fullSet = false;
 	
 	static boolean runLDA = false;
-	static boolean evalSVM = false;
+	static boolean evalSVM = true;
 	static boolean writeSVM = false;
-	static String fileSuffix = ""; //"_v"; //NSDSP
+	static String fileSuffix = "_iss3"; //"_iss2"; //"_v"; //NSDSP
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -108,6 +108,7 @@ public class TACEvaluator {
 		}
 		
 		Set<Citance> citances = loadCitances(annoInputFile);
+		System.out.println("*** loaded " + citances.size() + " initial citances");
 		
 		stopwords = loadStopwords(stopwordsFile);
 		
@@ -134,7 +135,7 @@ public class TACEvaluator {
 		Iterator it = sortByValueDescending(sectionCounts).keySet().iterator();
 		while (it.hasNext()) {
 			String s = (String)it.next();
-			System.out.println(s + " " + sectionCounts.get(s));
+			//System.out.println(s + " " + sectionCounts.get(s));
 		}
 		//System.exit(1);
 		
@@ -173,12 +174,13 @@ public class TACEvaluator {
 			//predictions = getPerfectPredictions(citances);
 		}
 		
+		System.out.println("*** sentence pred for " + sentencePredictions.keySet().size() + " citances");
 		if (writeSVM) {
 			writeSVMFiles(citances, sentencePredictions);
 		} else {
 			
-			writePredictions(sentencePredictions);
-			//scorePredictions(sentencePredictions);
+			//writePredictions(sentencePredictions);
+			scorePredictions(sentencePredictions);
 		}
 		//List<Double> recall = scorePredictions(predictions);
 		/*
@@ -286,7 +288,12 @@ public class TACEvaluator {
 
 	private static void writePredictions(Map<Citance, List<Sentence>> sentencePredictions) throws IOException {
 		
+		for (String w : globalIntersectionTypes) {
+			allUsefulWords.add(w);
+		}
+		
 		BufferedWriter bPredictions = new BufferedWriter(new FileWriter(annoOutputFile));
+		int in=0;
 		for (Citance c : sentencePredictions.keySet()) {
 			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
 				//continue; // TODO: DONT LEAVE THIS; BYRON
@@ -298,15 +305,17 @@ public class TACEvaluator {
 			Document d = globalDocs.get(c.topicID + ":" + c.referenceDoc);
 			System.out.println("citance: " + c.topicID + ":" + c.citanceNum);
 			bPredictions.write("Topic ID: " + c.topicID + " | Citance Number: " + c.citanceNum);
-			
+			in++;
 			// options for Byron
 			bPredictions.write(" | Citation Text:");
+			bPredictions.write(" " + c.citationText);
+			/*
 			for (String w : citanceTypes) {
-				if (allUsefulWords.contains(w)) {
-					bPredictions.write(" " + w);
+				if (allUsefulWords.contains(w.toLowerCase())) {
+					bPredictions.write(" " + w.toLowerCase());
 				}
 			}
-			
+			*/
 			bPredictions.write(" | Reference Offset: [");
 			for (int i=0; i<3; i++) {
 				bPredictions.write(sentencePredictions.get(c).get(i).startPos + "-" +sentencePredictions.get(c).get(i).endPos + "'");
@@ -321,23 +330,25 @@ public class TACEvaluator {
 				
 				Set<String> refTypes = removeStopwordsAndBadWords(sentencePredictions.get(c).get(i).types);
 				
+				/*
 				for (String w : refTypes) {
-					if (allUsefulWords.contains(w)) {
-						bPredictions.write(w + " ");
+					if (allUsefulWords.contains(w.toLowerCase())) {
+						bPredictions.write(w.toLowerCase() + " ");
 					}
 				}
+				*/
 				
-				/*
 				bPredictions.write(d.originalText.substring(sentencePredictions.get(c).get(i).startPos,sentencePredictions.get(c).get(i).endPos) + " ");
 				if (i < 2) {
 					bPredictions.write("... ");
 				}
-				*/
+				
 			}
 			bPredictions.write("| Discourse Facet: | Run ID: BLLIP 1\n");
 			
 		}
-		
+		bPredictions.close();
+		System.out.println("completed " + in + " citances");
 	}
 
 	// we know the truth for these svm citances, so let's plot it
@@ -427,7 +438,6 @@ public class TACEvaluator {
 		Citance lastC = null;
 		Document lastD = null;
 		for (Citance c : citances) {
-			
 
 			// training Citance
 			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
@@ -499,10 +509,8 @@ public class TACEvaluator {
 		System.out.println("we've seen " + selectedFeatures.size() + " of " + allUsefulWords.size() + " word features");
 		// ensures training has seen everything
 		for (int ew=0; ew<allUsefulWords.size(); ew++) {
-			//if (!selectedFeatures.contains(ew)) {
-				String line = "-1 " + getSVMFeatures(900, lastS, lastC, lastD, ew);
-				bTraining.write(line + "\n");
-			//}
+			String line = "-1 " + getSVMFeatures(900, lastS, lastC, lastD, ew);
+			bTraining.write(line + "\n");
 		}
 		bTraining.close();
 		bTesting.close();
@@ -549,13 +557,13 @@ public class TACEvaluator {
 
 		}
 		
-		
+		/*
 		if (forcedBit == -1) {
 			features.add((double)intersection);
 		} else {
 			features.add((double)0);
 		}
-		
+		*/
 		
 		//System.out.println("cit:" + c.topicID + " " + c.citationText + " ref:" + c.referenceDoc);
 		//System.out.println("sent:" + s);
@@ -652,17 +660,17 @@ public class TACEvaluator {
 		
 		if (forcedBit == -1) {
 			features.add((double)bestNeighborPos);
-			//features.add((double)s.sentence.length());
-			//features.add((double)docPlacement);
+			features.add((double)s.sentence.length());
+			features.add((double)docPlacement);
 			//features.add((double)Math.min(docPlacement, sectionPlacement));
-			//features.add((double)Math.min(sectionPlacement, paragraphPlacement));
+			features.add((double)Math.min(sectionPlacement, paragraphPlacement));
 		} else {
 			double t = (double)(rand.nextInt((400-250)+1) + 250);
 			features.add(t); // best neighbor pos
-			//features.add((double)rand.nextInt((6-4)+1)+4); // sentence length
-			//features.add(t); // doc placement
+			features.add((double)rand.nextInt((6-4)+1)+4); // sentence length
+			features.add(t); // doc placement
 			//features.add((double)rand.nextInt((100 - 80)+1)+80); // section placment
-			//features.add((double)rand.nextInt((60-20)+1) + 20); // paragrpah placment
+			features.add((double)rand.nextInt((60-20)+1) + 20); // paragrpah placment
 		}
 
 		
@@ -2138,10 +2146,10 @@ public class TACEvaluator {
 				int intersection = 0;
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
-						//if (wordWeights.containsKey(token)) {
+						if (wordWeights.containsKey(token)) {
 							intersection += 1;
 							globalIntersectionTypes.add(token);
-						//}
+						}
 					}
 				}
 				triSentenceScores.put(i, (double)intersection);
@@ -2194,10 +2202,10 @@ public class TACEvaluator {
 				int intersection = 0;
 				for (String token : curReferenceTypes) {
 					if (citanceTypes.contains(token)) {
-						if (wordWeights.containsKey(token)) {
+						//if (wordWeights.containsKey(token)) {
 							intersection += 1; //(wordWeights.get(token));
 							//System.out.println(token + " adds " + wordWeights.get(token));
-						}
+						//}
 					}
 				}
 				
