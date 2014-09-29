@@ -11,3 +11,4 @@
 *.tgz
 *.txt
 *.pdf
+predicted_annotations_with_ref_texts.txt
