@@ -30,14 +30,14 @@ public class TACEvaluator {
 	static String dataDir = "/Users/christanner/research/projects/TAC2014/eval/";
 	static String docDir = "/Users/christanner/research/projects/TAC2014/TAC_2014_BiomedSumm_Training_Data_V1.2/"; //TAC_2014_BiomedSumm_Training_Data/";
 	
-	static boolean fullSet = true;
+	static boolean fullSet = false;
 	
 	static boolean runLDA = false;
-	static boolean evalSVM = false;
+	static boolean evalSVM = true;
 	static boolean writeSVM = false;
 	static boolean loadDiscourse = false; // true means use the ones listed in the no_ref byron file
 	
-	static String fileSuffix = "_eval2"; //"_goldlib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
+	static String fileSuffix = "_toy"; //"_goldlib"; //"_iss"; //"_issB"; //"_iss"; //"_iss2"; //"_v"; //NSDSP
 	
 	static int numTriSentences = 0;
 	static int numBiSentences = 0;
@@ -70,7 +70,7 @@ public class TACEvaluator {
 	
 	static String annoOutputFile = dataDir + "annoPrediction.txt";
 	
-	static int negativeRatio = 10;
+	static int negativeRatio = 5;
 	// LDA's input files
 	static String annoInputFile = dataDir + "annoLegend.txt";
 	static String malletInputFile = dataDir + "mallet-tac.txt";
@@ -115,8 +115,8 @@ public class TACEvaluator {
 			}
 		}
 		*/
-		cleanUpAnno(1, dataDir + "BLLIP1b.txt", dataDir + "BLLIP1.txt");
-		System.exit(1);
+		//cleanUpAnno(1, dataDir + "BLLIP1b.txt", dataDir + "BLLIP1.txt");
+		//System.exit(1);
 		
 		if (fullSet) {
 			annoInputFile = dataDir + "annoLegend_all.txt";
@@ -179,8 +179,8 @@ public class TACEvaluator {
 		//System.exit(1);
 		
 		if (evalSVM) {	
-			//evalSVM(citances);
-			writeSVMPredictions(citances);
+			evalSVM(citances);
+			//writeSVMPredictions(citances);
 			return;
 		}
 		
@@ -842,6 +842,7 @@ public class TACEvaluator {
 		Document lastD = null;
 		for (Citance c : citances) {
 
+			System.out.println("c:" + c);
 			// training Citance
 			if ((fullSet && !c.topicID.contains("EVAL")) || (!fullSet && !testTopics.contains(c.topicID))) {
 
@@ -910,6 +911,7 @@ public class TACEvaluator {
 		} // end of iterating over all Citances
 		
 		System.out.println("we've seen " + selectedFeatures.size() + " of " + allUsefulWords.size() + " word features");
+		
 		// ensures training has seen everything
 		for (int ew=0; ew<allUsefulWords.size(); ew++) {
 			String line = "-1 " + getSVMFeatures(900, lastS, lastC, lastD, ew);
@@ -961,13 +963,13 @@ public class TACEvaluator {
 
 		}
 		
-		
+		/*
 		if (forcedBit == -1) {
 			features.add((double)intersection);
 		} else {
 			features.add((double)0);
 		}
-		
+		*/
 		
 		//System.out.println("cit:" + c.topicID + " " + c.citationText + " ref:" + c.referenceDoc);
 		//System.out.println("sent:" + s);
@@ -1061,14 +1063,14 @@ public class TACEvaluator {
 		
 		
 		if (forcedBit == -1) {
-			//features.add((double)bestNeighborPos);
+			features.add((double)bestNeighborPos);
 			features.add((double)s.sentence.length());
 			features.add((double)docPlacement);
 			//features.add((double)Math.min(docPlacement, sectionPlacement));
 			features.add((double)Math.min(sectionPlacement, paragraphPlacement));
 		} else {
 			double t = (double)(rand.nextInt((400-250)+1) + 250);
-			//features.add(t); // best neighbor pos
+			features.add(t); // best neighbor pos
 			features.add((double)rand.nextInt((6-4)+1)+4); // sentence length
 			features.add(t); // doc placement
 			//features.add((double)rand.nextInt((100 - 80)+1)+80); // section placment
